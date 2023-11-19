@@ -29,8 +29,9 @@ ament_target_dependencies(ndt_2d_mapper
   rclcpp_components
   sensor_msgs
 )
+target_link_libraries(ndt_2d_mapper ndt_2d_lib)
 rclcpp_components_register_node(ndt_2d_mapper
-  PLUGIN "ndt_2d::Map"
+  PLUGIN "ndt_2d::Mapper"
   EXECUTABLE ndt_2d_map_node
 )
 

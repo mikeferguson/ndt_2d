@@ -124,7 +124,7 @@ private:
   int getIndex(double x, double y);
 
   double cell_size_;
-  double size_x_, size_y_;
+  size_t size_x_, size_y_;
   double origin_x_, origin_y_;
   std::vector<Cell> cells_;
 };

@@ -37,6 +37,7 @@ void Cell::compute()
   }
   mean_x = sum_x / size;
   mean_y = sum_y / size;
+  // std::cout << "Mean: " << mean_x << " " << mean_y << std::endl;
 
   // Compute the covariance of the points
   double sum_xx = 0.0;
@@ -76,6 +77,8 @@ double Cell::score(Point & p)
     return 0.0;
   }
 
+  // std::cout << "Model: " << mean_x << " " << mean_y << " " << cov_xx << " " << cov_xy << " " << cov_yy << std::endl;
+
   double dx = p.x - mean_x;
   double dy = p.y - mean_y;
 
@@ -83,7 +86,7 @@ double Cell::score(Point & p)
   double r1c2 = (dx * inv_xy) + (dy * inv_yy);
 
   double score = exp(r1c1 * dx + r1c2 * dy);
-  // std::cout << dx << ", " << dy << ": " << r1c1 << ", " << r1c2 << " " << score << std::endl;
+  // std::cout << "scoring: " << dx << ", " << dy << ": " << r1c1 << ", " << r1c2 << " " << score << std::endl;
 
   return score;
 }
@@ -91,11 +94,12 @@ double Cell::score(Point & p)
 NDT::NDT(double cell_size, double size_x, double size_y)
 {
   cell_size_ = cell_size;
-  size_x_ = size_x;
-  size_y_ = size_y;
+  size_x_ = (size_x / cell_size_) + 1;
+  size_y_ = (size_y / cell_size_) + 1;
   origin_x_ = 0.0;
   origin_y_ = 0.0;
-  cells_.resize(size_x * size_y);
+  cells_.resize(size_x_ * size_y_);
+  std::cout << "Created an NDT of " << size_x_ << " by " << size_y_ << " cells" << std::endl;
 }
 
 NDT::~NDT()
@@ -108,7 +112,7 @@ void NDT::addScan(ScanPtr& scan, Pose2d& pose)
   double cos_th = cos(pose.theta);
   double sin_th = sin(pose.theta);
 
-  for (auto point : scan->points)
+  for (auto & point : scan->points)
   {
     // Transform the point by pose
     Point p(pose.x, pose.y);
@@ -126,7 +130,7 @@ void NDT::addScan(ScanPtr& scan, Pose2d& pose)
 
 void NDT::compute()
 {
-  for (auto cell : cells_)
+  for (auto & cell : cells_)
   {
     cell.compute();
   }
@@ -135,7 +139,7 @@ void NDT::compute()
 double NDT::likelihood(std::vector<Point>& points)
 {
   double score = 0.0;
-  for (auto point : points)
+  for (auto & point : points)
   {
     score += likelihood(point);
   }
@@ -146,7 +150,7 @@ void NDT::likelihood(std::vector<Point>& points, std::vector<double>& scores)
 {
   scores.clear();
   scores.reserve(points.size());
-  for (auto point : points)
+  for (auto & point : points)
   {
     scores.push_back(likelihood(point));
   }

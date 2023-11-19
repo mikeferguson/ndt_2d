@@ -27,46 +27,54 @@ Mapper::~Mapper()
 
 void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg)
 {
+  RCLCPP_INFO(logger_, "Got scan");
+
   // Convert ROS msg into NDT scan
   ndt_2d::ScanPtr scan(new ndt_2d::Scan());
   scan->points.reserve(msg->ranges.size());
 
-  double angle = msg->angle_min;
   for (size_t i = 0; i < msg->ranges.size(); ++i)
   {
+    // Filter out NANs
+    if (std::isnan(msg->ranges[i])) continue;
+    // Project point and push into scan
+    double angle = msg->angle_min + i * msg->angle_increment;
     ndt_2d::Point point(sin(angle) * msg->ranges[i],
                         cos(angle) * msg->ranges[i]);
     scan->points.push_back(point);
-    angle += msg->angle_increment;
   }
 
   // Build the NDT
-  ndt_2d::NDT ndt(0.25, 25.0, 25.0);
+  ndt_2d::NDT ndt(0.25, 10.0, 10.0);
   ndt_2d::Pose2d pose;
-  pose.x = 12.5;
-  pose.y = 12.5;
+  pose.x = 5.0;
+  pose.y = 5.0;
+  pose.theta = 0.0;
   ndt.addScan(scan, pose);
   ndt.compute();
 
   // Build map message by sampling from NDT
   nav_msgs::msg::OccupancyGrid grid;
-  grid.header.frame_id = "base_link";
+  grid.header.frame_id = msg->header.frame_id;
   grid.header.stamp = this->now();
   grid.info.resolution = resolution_;
-  grid.info.width = 25.0 / resolution_;
-  grid.info.height = 25.0 / resolution_;
-  grid.info.origin.position.x = -12.5;
-  grid.info.origin.position.y = -12.5;
+  grid.info.width = 10.0 / resolution_;
+  grid.info.height = 10.0 / resolution_;
+  grid.info.origin.position.x = -5.0;
+  grid.info.origin.position.y = -5.0;
   grid.data.assign(grid.info.width * grid.info.height, 0);
   for (size_t x = 0; x < grid.info.width; ++x)
   {
     for (size_t y = 0; y < grid.info.height; ++y)
     {
+      double mx = x * resolution_;
+      double my = y * resolution_;
       // This needs to be updated once NDT handles origin properly
-      ndt_2d::Point point(x + 12.5, y + 12.5);
-      if (ndt.likelihood(point) > 0.5)
+      ndt_2d::Point point(mx, my);
+      double l = ndt.likelihood(point);
+      if (l > 0.0 && l < 50.0)
       {
-        grid.data[x + (y * grid.info.width)] = 100;
+        grid.data[y + (x * grid.info.height)] = 100;
       }
     }
   }
@@ -74,3 +82,6 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 }
 
 }  // namespace ndt_2d
+
+#include "rclcpp_components/register_node_macro.hpp"
+RCLCPP_COMPONENTS_REGISTER_NODE(ndt_2d::Mapper)
