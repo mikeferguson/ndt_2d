@@ -107,7 +107,16 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->points.push_back(point);
   }
 
-  // TODO(fergs): Build an NDT of the last several scans
+  // Build an NDT of the last several scans
+  double ndt_size = 10.0;
+  NDT ndt(ndt_resolution_, ndt_size, ndt_size, -0.5 * ndt_size, -0.5 * ndt_size);
+  size_t start = (scans_.size() > rolling_depth_) ? scans_.size() - rolling_depth_ : 0;
+  for (size_t i = start; i < scans_.size(); ++i)
+  {
+    ndt.addScan(scans_[i], corrected_poses_[i]);
+  }
+  ndt.compute();
+
   // TODO(fergs): Search for best correlation of new scan against NDT
   // TODO(fergs): Update corrected_pose
 
@@ -160,10 +169,9 @@ void Mapper::mapPublishCallback()
   double sx = 10.0;
   double sy = 10.0;
 
-  // Build an NDT
+  // Build an NDT from all scans
   NDT ndt(ndt_resolution_, sx, sy, -0.5 * sx, -0.5 * sy);
-  size_t start = (num_scans > rolling_depth_) ? num_scans - rolling_depth_ : 0;
-  for (size_t i = start; i < num_scans; ++i)
+  for (size_t i = 0; i < num_scans; ++i)
   {
     ndt.addScan(scans_[i], corrected_poses_[i]);
   }
