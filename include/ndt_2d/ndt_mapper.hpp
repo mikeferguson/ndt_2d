@@ -3,8 +3,8 @@
  * All Rights Reserved
  */
 
-#ifndef NDT_2D__MAPPER_HPP_
-#define NDT_2D__MAPPER_HPP_
+#ifndef NDT_2D__NDT_MAPPER_HPP_
+#define NDT_2D__NDT_MAPPER_HPP_
 
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
@@ -33,4 +33,4 @@ protected:
 
 }  // namespace ndt_2d
 
-#endif  // NDT_2D__MAPPER_HPP_
+#endif  // NDT_2D__NDT_MAPPER_HPP_

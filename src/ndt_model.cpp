@@ -77,7 +77,8 @@ double Cell::score(Point & p)
     return 0.0;
   }
 
-  // std::cout << "Model: " << mean_x << " " << mean_y << " " << cov_xx << " " << cov_xy << " " << cov_yy << std::endl;
+  // std::cout << "Model: " << mean_x << " " << mean_y << " ";
+  // std::cout << cov_xx << " " << cov_xy << " " << cov_yy << std::endl;
 
   double dx = p.x - mean_x;
   double dy = p.y - mean_y;
@@ -86,7 +87,8 @@ double Cell::score(Point & p)
   double r1c2 = (dx * inv_xy) + (dy * inv_yy);
 
   double score = exp(r1c1 * dx + r1c2 * dy);
-  // std::cout << "scoring: " << dx << ", " << dy << ": " << r1c1 << ", " << r1c2 << " " << score << std::endl;
+  // std::cout << "scoring: " << dx << ", " << dy << ": " << r1c1;
+  // std::cout << ", " << r1c2 << " " << score << std::endl;
 
   return score;
 }
