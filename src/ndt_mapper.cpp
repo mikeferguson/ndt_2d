@@ -5,6 +5,8 @@
 
 #include <angles/angles.h>
 #include <tf2/utils.h>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <cmath>
 #include <chrono>
 #include <ndt_2d/ndt_model.hpp>
@@ -65,11 +67,11 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   odom_pose.x = odom_pose_tf.pose.position.x;
   odom_pose.y = odom_pose_tf.pose.position.y;
   odom_pose.theta = tf2::getYaw(odom_pose_tf.pose.orientation);
-  std::cout << odom_pose.x << " " << odom_pose.y << " " << odom_pose.theta << std::endl;
 
   // Make sure we have traveled far enough
   if (!odom_poses_.empty())
   {
+    // Calculate delta in odometry frame
     double dx = odom_pose.x - odom_poses_.back().x;
     double dy = odom_pose.y - odom_poses_.back().y;
     double dth = angles::shortest_angular_distance(odom_poses_.back().theta, odom_pose.theta);
@@ -79,17 +81,27 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     {
       return;
     }
-    // Going to use this pose, apply last correction as starting point
-    corrected_pose.x = corrected_poses_.back().x + dx;
-    corrected_pose.y = corrected_poses_.back().y + dy;
+    // Odometry and corrected frame may not be aligned - determine heading between them
+    double heading = angles::shortest_angular_distance(odom_poses_.back().theta,
+                                                       corrected_poses_.back().theta);
+    // Now apply odometry delta, corrected by heading, to get initial corrected pose
+    corrected_pose.x = corrected_poses_.back().x + (dx * cos(heading)) - (dy * sin(heading));
+    corrected_pose.y = corrected_poses_.back().y + (dx * sin(heading)) + (dy * cos(heading));
     corrected_pose.theta = angles::normalize_angle(corrected_poses_.back().theta + dth);
+
+    std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y
+              << " " << odom_pose.theta << std::endl;
+    std::cout << "Corrected: " << corrected_pose.x << " " << corrected_pose.y
+              << " " << corrected_pose.theta << std::endl;
   }
   else
   {
-    // Initialize corrections
+    // Initialize correction - start robot at origin of map
     corrected_pose.x = 0.0;
     corrected_pose.y = 0.0;
     corrected_pose.theta = 0.0;
+    std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y << " "
+              << odom_pose.theta << std::endl;
   }
   RCLCPP_INFO(logger_, "Adding scan to map");
 
@@ -102,8 +114,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     if (std::isnan(msg->ranges[i])) continue;
     // Project point and push into scan
     double angle = msg->angle_min + i * msg->angle_increment;
-    Point point(sin(angle) * msg->ranges[i],
-                cos(angle) * msg->ranges[i]);
+    Point point(cos(angle) * msg->ranges[i],
+                sin(angle) * msg->ranges[i]);
     scan->points.push_back(point);
   }
 
@@ -131,16 +143,29 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
 void Mapper::publishTransform()
 {
+  // Latest corrected pose gives us map -> robot
+  Pose2d & corrected = corrected_poses_.back();
+  Eigen::Isometry3d map_to_robot(Eigen::Translation3d(corrected.x, corrected.y, 0.0) *
+                                 Eigen::AngleAxisd(corrected.theta, Eigen::Vector3d::UnitZ()));
+
+  // Latest odom pose gives us odom -> robot
+  Pose2d & odom = odom_poses_.back();
+  Eigen::Isometry3d odom_to_robot(Eigen::Translation3d(odom.x, odom.y, 0.0) *
+                                  Eigen::AngleAxisd(odom.theta, Eigen::Vector3d::UnitZ()));
+
+  // Compute map -> odom
+  Eigen::Isometry3d map_to_odom(map_to_robot * odom_to_robot.inverse());
+
   // Publish TF between map and odom
   geometry_msgs::msg::TransformStamped transform;
   transform.header.stamp = this->now();
   transform.header.frame_id = "map";
   transform.child_frame_id = "odom";
-  // TODO(fergs): this needs to actually account for real correction
-  transform.transform.translation.x = -odom_poses_[0].x;
-  transform.transform.translation.y = -odom_poses_[0].y;
-  transform.transform.rotation.z = sin(-odom_poses_[0].theta / 2.0);
-  transform.transform.rotation.w = cos(-odom_poses_[0].theta / 2.0);
+  transform.transform.translation.x = map_to_odom.translation().x();
+  transform.transform.translation.y = map_to_odom.translation().y();
+  Eigen::Quaterniond q(map_to_odom.rotation());
+  transform.transform.rotation.z = q.z();
+  transform.transform.rotation.w = q.w();
   tf2_broadcaster_->sendTransform(transform);
 }
 
@@ -197,7 +222,7 @@ void Mapper::mapPublishCallback()
       double l = ndt.likelihood(point);
       if (l > 0.0 && l < 50.0)
       {
-        grid.data[y + (x * grid.info.height)] = 100;
+        grid.data[x + (y * grid.info.width)] = 100;
       }
     }
   }

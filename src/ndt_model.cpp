@@ -118,7 +118,7 @@ void NDT::addScan(ScanPtr& scan, Pose2d& pose)
   {
     // Transform the point by pose
     Point p(pose.x, pose.y);
-    p.x += point.x * cos_th + point.y * sin_th;
+    p.x += point.x * cos_th - point.y * sin_th;
     p.y += point.x * sin_th + point.y * cos_th;
 
     // Determine index in NDT grid, add if valid index
