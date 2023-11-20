@@ -11,6 +11,7 @@ find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 include_directories(include)
 
@@ -28,6 +29,7 @@ ament_target_dependencies(ndt_2d_mapper
   rclcpp
   rclcpp_components
   sensor_msgs
+  tf2_ros
 )
 target_link_libraries(ndt_2d_mapper ndt_2d_lib)
 rclcpp_components_register_node(ndt_2d_mapper

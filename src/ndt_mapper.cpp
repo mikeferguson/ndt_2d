@@ -15,6 +15,10 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   logger_(rclcpp::get_logger("ndt_2d_mapper"))
 {
   resolution_ = this->declare_parameter<double>("resolution", 0.05);
+  odom_frame_ = this->declare_parameter<std::string>("odom_frame", "odom");
+
+  tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
 
   map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map", 1);
   laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -44,9 +48,11 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->points.push_back(point);
   }
 
+  // TODO: Compute pose of scan in odom_frame_
+  ndt_2d::Pose2d pose;
+
   // Build the NDT
   ndt_2d::NDT ndt(0.25, 10.0, 10.0);
-  ndt_2d::Pose2d pose;
   pose.x = 5.0;
   pose.y = 5.0;
   pose.theta = 0.0;
