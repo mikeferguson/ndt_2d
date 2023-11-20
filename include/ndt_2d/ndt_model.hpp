@@ -76,8 +76,10 @@ public:
    * @param cell_size Size of NDT cells in meters.
    * @param size_x Size of NDT in meters.
    * @param size_y Size of NDT in meters.
+   * @param origin_x Coordinate of lower left corner in meters.
+   * @param origin_y Coordinate of lower left corner in meters.
    */
-  NDT(double cell_size, double size_x, double size_y);
+  NDT(double cell_size, double size_x, double size_y, double origin_x, double origin_y);
 
   virtual ~NDT();
 

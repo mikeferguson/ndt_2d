@@ -54,13 +54,14 @@ TEST(NdtModelTests, test_ndt_cell)
 TEST(NdtModelTests, test_ndt)
 {
   // Create an NDT with cell size of 1m covering a grid of 10x10 meters
-  ndt_2d::NDT ndt(1.0, 10.0, 10.0);
+  ndt_2d::NDT ndt(1.0, 10.0, 10.0, -5.0, -5.0);
 
   // Create a scan to input
   ndt_2d::ScanPtr scan(new ndt_2d::Scan());
   ndt_2d::Pose2d pose;
-  pose.x = 5.0;
-  pose.y = 5.0;
+  pose.x = 0.0;
+  pose.y = 0.0;
+  pose.theta = 0.0;
   ndt_2d::Point p(3.5, 3.5);
   scan->points.push_back(p);
   p.x = 3.45;
@@ -76,8 +77,8 @@ TEST(NdtModelTests, test_ndt)
 
   // Build vector of points to score
   std::vector<ndt_2d::Point> points;
-  p.x = 8.5;
-  p.y = 8.5;
+  p.x = 3.5;
+  p.y = 3.5;
   points.push_back(p);
 
   // Test scoring

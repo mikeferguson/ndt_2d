@@ -93,13 +93,13 @@ double Cell::score(Point & p)
   return score;
 }
 
-NDT::NDT(double cell_size, double size_x, double size_y)
+NDT::NDT(double cell_size, double size_x, double size_y, double origin_x, double origin_y)
 {
   cell_size_ = cell_size;
   size_x_ = (size_x / cell_size_) + 1;
   size_y_ = (size_y / cell_size_) + 1;
-  origin_x_ = 0.0;
-  origin_y_ = 0.0;
+  origin_x_ = origin_x;
+  origin_y_ = origin_y;
   cells_.resize(size_x_ * size_y_);
   std::cout << "Created an NDT of " << size_x_ << " by " << size_y_ << " cells" << std::endl;
 }

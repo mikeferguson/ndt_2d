@@ -7,11 +7,14 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(angles REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 include_directories(include)
 
@@ -25,11 +28,14 @@ add_library(ndt_2d_mapper SHARED
   src/ndt_mapper.cpp
 )
 ament_target_dependencies(ndt_2d_mapper
+  angles
+  geometry_msgs
   nav_msgs
   rclcpp
   rclcpp_components
   sensor_msgs
   tf2_ros
+  tf2_geometry_msgs
 )
 target_link_libraries(ndt_2d_mapper ndt_2d_lib)
 rclcpp_components_register_node(ndt_2d_mapper
