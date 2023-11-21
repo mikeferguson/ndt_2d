@@ -24,11 +24,11 @@ TEST(NdtModelTests, test_ndt_cell)
   // Update NDT
   cell.compute();
 
-  EXPECT_EQ(3.5, cell.mean_x);
-  EXPECT_EQ(3.5, cell.mean_y);
-  EXPECT_NEAR(0.005, cell.cov_xx, 0.0001);
-  EXPECT_NEAR(0.0025, cell.cov_xy, 0.0001);
-  EXPECT_NEAR(0.00125, cell.cov_yy, 0.0001);
+  EXPECT_EQ(3.5, cell.mean(0));
+  EXPECT_EQ(3.5, cell.mean(1));
+  EXPECT_NEAR(0.005, cell.covariance(0, 0), 0.0001);
+  EXPECT_NEAR(0.0025, cell.covariance(0, 1), 0.0001);
+  EXPECT_NEAR(0.00125, cell.covariance(1, 1), 0.0001);
 
   p.x = 3.5;
   p.y = 3.5;

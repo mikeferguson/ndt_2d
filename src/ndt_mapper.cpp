@@ -30,6 +30,10 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   minimum_travel_rotation_ = this->declare_parameter<double>("minimum_travel_rotation", 1.0);
   rolling_depth_ = this->declare_parameter<int>("rolling_depth", 10);
   odom_frame_ = this->declare_parameter<std::string>("odom_frame", "odom");
+  search_angular_resolution_ = this->declare_parameter<double>("search_angular_resolution", 0.0025);
+  search_angular_size_ = this->declare_parameter<double>("search_angular_size", 0.1);
+  search_linear_resolution_ = this->declare_parameter<double>("search_linear_resolution", 0.005);
+  search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
 
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
@@ -91,11 +95,6 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     corrected_pose.x = corrected_poses_.back().x + (dx * cos(heading)) - (dy * sin(heading));
     corrected_pose.y = corrected_poses_.back().y + (dx * sin(heading)) + (dy * cos(heading));
     corrected_pose.theta = angles::normalize_angle(corrected_poses_.back().theta + dth);
-
-    std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y
-              << " " << odom_pose.theta << std::endl;
-    std::cout << "Corrected: " << corrected_pose.x << " " << corrected_pose.y
-              << " " << corrected_pose.theta << std::endl;
   }
   else
   {
@@ -103,8 +102,6 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     corrected_pose.x = 0.0;
     corrected_pose.y = 0.0;
     corrected_pose.theta = 0.0;
-    std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y << " "
-              << odom_pose.theta << std::endl;
   }
   RCLCPP_INFO(logger_, "Adding scan to map");
 
@@ -122,18 +119,76 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->points.push_back(point);
   }
 
-  // Build an NDT of the last several scans
-  double ndt_size = 10.0;
-  NDT ndt(ndt_resolution_, ndt_size, ndt_size, -0.5 * ndt_size, -0.5 * ndt_size);
-  size_t start = (scans_.size() > rolling_depth_) ? scans_.size() - rolling_depth_ : 0;
-  for (size_t i = start; i < scans_.size(); ++i)
+  if (!odom_poses_.empty())
   {
-    ndt.addScan(scans_[i], corrected_poses_[i]);
-  }
-  ndt.compute();
+    // Build an NDT of the last several scans
+    double ndt_size = 10.0;
+    NDT ndt(ndt_resolution_, ndt_size, ndt_size, -0.5 * ndt_size, -0.5 * ndt_size);
+    size_t start = (scans_.size() > rolling_depth_) ? scans_.size() - rolling_depth_ : 0;
+    for (size_t i = start; i < scans_.size(); ++i)
+    {
+      ndt.addScan(scans_[i], corrected_poses_[i]);
+    }
+    ndt.compute();
 
-  // TODO(fergs): Search for best correlation of new scan against NDT
-  // TODO(fergs): Update corrected_pose
+    // Search NDT for best correlation for new scan
+    Pose2d best_pose;
+    double best_score = 0;
+
+    std::vector<Point> points_outer;
+    std::vector<Point> points_inner;
+    points_outer.resize(scan->points.size());
+    points_inner.resize(scan->points.size());
+
+    for (double dth = -search_angular_size_;
+         dth < search_angular_size_;
+         dth += search_angular_resolution_)
+    {
+      // Do orientation on the outer loop - then we can simply shift points in inner loops
+      double costh = cos(corrected_pose.theta + dth);
+      double sinth = sin(corrected_pose.theta + dth);
+      for (size_t i = 0; i < points_outer.size(); ++i)
+      {
+        points_outer[i].x = scan->points[i].x * costh - scan->points[i].y * sinth + corrected_pose.x;
+        points_outer[i].y = scan->points[i].x * sinth + scan->points[i].y * costh + corrected_pose.y;
+      }
+
+      for (double dx = -search_linear_size_;
+           dx < search_linear_size_;
+           dx += search_linear_resolution_)
+      {
+        for (double dy = -search_linear_size_;
+             dy < search_linear_size_;
+             dy += search_linear_resolution_)
+        {
+          for (size_t i = 0; i < points_inner.size(); ++i)
+          {
+            points_inner[i].x = points_outer[i].x + dx;
+            points_inner[i].y = points_outer[i].y + dy;
+          }
+
+          double likelihood = -ndt.likelihood(points_inner);
+          if (likelihood < best_score)
+          {
+            best_score = likelihood;
+            best_pose.x = dx;
+            best_pose.y = dy;
+            best_pose.theta = dth;
+          }
+        }
+      }
+    }
+
+    // Add correction to corrected_pose
+    corrected_pose.x += best_pose.x;
+    corrected_pose.y += best_pose.y;
+    corrected_pose.theta += best_pose.theta;
+  }
+
+  std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y
+            << " " << odom_pose.theta << std::endl;
+  std::cout << "Corrected: " << corrected_pose.x << " " << corrected_pose.y
+            << " " << corrected_pose.theta << std::endl;
 
   {
     // TODO(fergs): lock this when timer is converted to thread
@@ -163,7 +218,7 @@ void Mapper::publishTransform()
   geometry_msgs::msg::TransformStamped transform;
   transform.header.stamp = this->now();
   transform.header.frame_id = "map";
-  transform.child_frame_id = "odom";
+  transform.child_frame_id = odom_frame_;
   transform.transform.translation.x = map_to_odom.translation().x();
   transform.transform.translation.y = map_to_odom.translation().y();
   Eigen::Quaterniond q(map_to_odom.rotation());

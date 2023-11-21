@@ -6,6 +6,7 @@
 #ifndef NDT_2D__NDT_MODEL_HPP_
 #define NDT_2D__NDT_MODEL_HPP_
 
+#include <Eigen/Core>
 #include <memory>
 #include <vector>
 
@@ -14,11 +15,18 @@ namespace ndt_2d
 
 struct Point
 {
+  Point()
+  {
+    x = 0;
+    y = 0;
+  }
+
   Point(double x, double y)
   {
     this->x = x;
     this->y = y;
   }
+
   double x, y;
 };
 
@@ -50,11 +58,10 @@ typedef std::shared_ptr<Scan> ScanPtr;
 
 struct Cell
 {
-  explicit Cell(size_t size = 10)
-  {
-    points.reserve(size);
-    valid = true;
-  }
+  using vector_t = Eigen::Matrix<double, 2, 1>;
+  using matrix_t = Eigen::Matrix<double, 2, 2>;
+
+  explicit Cell();
 
   /** @brief Add a point to this cell */
   void addPoint(Point & p);
@@ -68,18 +75,12 @@ struct Cell
   // Are mean/cov valid;
   bool valid;
 
-  double mean_x;
-  double mean_y;
-
-  double cov_xx;
-  double cov_xy;
-  double cov_yy;
-
-  double inv_xx;
-  double inv_xy;
-  double inv_yy;
-
-  std::vector<Point> points;
+  // Technically this should be size_t - but for Eigen math, needs to be double
+  double n;
+  vector_t mean;
+  matrix_t covariance;
+  matrix_t correlation;
+  matrix_t information;
 };
 
 class NDT

@@ -22,6 +22,10 @@ include_directories(include)
 add_library(ndt_2d_lib SHARED
   src/ndt_model.cpp
 )
+# TODO: this is a super hacky way of getting Eigen dependency into library - do this correctly
+ament_target_dependencies(ndt_2d_lib
+  tf2_geometry_msgs
+)
 
 # Mapping node
 add_library(ndt_2d_mapper SHARED

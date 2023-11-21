@@ -5,92 +5,84 @@
 
 #include <iostream>
 
+#include <Eigen/Core>
+#include <Eigen/Eigen>
 #include <cmath>
 #include <ndt_2d/ndt_model.hpp>
 
 namespace ndt_2d
 {
 
+Cell::Cell()
+: valid(false),
+  n(0),
+  mean(vector_t::Zero()),
+  covariance(matrix_t::Zero()),
+  correlation(matrix_t::Zero()),
+  information(matrix_t::Zero())
+{
+}
+
 void Cell::addPoint(Point & point)
 {
-  points.push_back(point);
+  // TODO(fergs): take Eigen type directly
+  vector_t p;
+  p(0) = point.x;
+  p(1) = point.y;
+
+  mean = (mean * n + p) / (n + 1);
+  for (size_t i = 0; i < 3; ++i)
+  {
+    for (size_t j = i; j < 3; ++j)
+    {
+      correlation(i, j) = (correlation(i, j) * n + p(i) * p(j)) / (n + 1);
+    }
+  }
+
+  n += 1;
   valid = false;
 }
 
 void Cell::compute()
 {
   // No need to update
-  if (valid)
+  if (valid || n < 3)
   {
     return;
   }
 
-  size_t size = points.size();
-
-  // Compute the mean of the points
-  double sum_x = 0.0;
-  double sum_y = 0.0;
-  for (auto point : points)
+  const double scale = n / (n - 1);
+  for (size_t i = 0; i < 3; ++i)
   {
-    sum_x += point.x;
-    sum_y += point.y;
+    for (size_t j = 0; j < 3; ++j)
+    {
+      covariance(i, j) = (correlation(i, j) - (mean(i) * mean(j))) * scale;
+      covariance(j, i) = correlation(i, j);
+    }
   }
-  mean_x = sum_x / size;
-  mean_y = sum_y / size;
-  // std::cout << "Mean: " << mean_x << " " << mean_y << std::endl;
 
-  // Compute the covariance of the points
-  double sum_xx = 0.0;
-  double sum_xy = 0.0;
-  double sum_yy = 0.0;
-  for (auto point : points)
-  {
-    double dx = point.x - mean_x;
-    double dy = point.y - mean_y;
-    sum_xx += dx * dx;
-    sum_xy += dx * dy;
-    sum_yy += dy * dy;
-  }
-  cov_xx = sum_xx / size;
-  cov_xy = sum_xy / size;
-  cov_yy = sum_yy / size;
-  // std::cout << "Cov: " << cov_xx << " " << cov_xy << " " << cov_yy << std::endl;
+  // TODO(fergs): limit eigen values
 
-  // Compute the inverse of the covariance
-  double determinant = (cov_xx * cov_yy) - (cov_xy * cov_xy);
-  if (determinant > 0.0 && determinant < 0.000001) determinant = 0.000001;
-  if (determinant < 0.0 && determinant > -0.000001) determinant = -0.000001;
-  inv_xx = cov_yy / determinant;
-  inv_xy = -cov_xy / determinant;
-  inv_yy = cov_xx / determinant;
-  // std::cout << "Det: " << determinant << std::endl;
-  // std::cout << "Inv: " << inv_xx << " " << inv_xy << " " << cov_yy << std::endl;
-
+  information = covariance.inverse();
   valid = true;
 }
 
-double Cell::score(Point & p)
+double Cell::score(Point & point)
 {
-  if (points.size() < 2)
+  if (n < 3)
   {
-    // Need at least two points for our mean/cov to be valid
+    // Need at least three points for our mean/cov to be valid
     return 0.0;
   }
 
-  // std::cout << "Model: " << mean_x << " " << mean_y << " ";
-  // std::cout << cov_xx << " " << cov_xy << " " << cov_yy << std::endl;
+  // TODO(fergs): take Eigen type directly
+  vector_t p;
+  p(0) = point.x;
+  p(1) = point.y;
 
-  double dx = p.x - mean_x;
-  double dy = p.y - mean_y;
-
-  double r1c1 = (dx * inv_xx) + (dy * inv_xy);
-  double r1c2 = (dx * inv_xy) + (dy * inv_yy);
-
-  double score = exp(r1c1 * dx + r1c2 * dy);
-  // std::cout << "scoring: " << dx << ", " << dy << ": " << r1c1;
-  // std::cout << ", " << r1c2 << " " << score << std::endl;
-
-  return score;
+  const auto q = p - mean;
+  const double exponent = -0.5 * q.transpose() * information * q;
+  return std::exp(exponent);
 }
 
 NDT::NDT(double cell_size, double size_x, double size_y, double origin_x, double origin_y)
