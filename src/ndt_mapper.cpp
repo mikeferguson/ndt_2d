@@ -11,6 +11,7 @@
 #include <chrono>
 #include <ndt_2d/ndt_model.hpp>
 #include <ndt_2d/ndt_mapper.hpp>
+#include <ndt_2d/occupancy_grid.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
@@ -33,6 +34,8 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
   tf2_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+
+  grid_ = std::make_shared<OccupancyGrid>(map_resolution_);
 
   map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map", 1);
   laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
@@ -182,51 +185,19 @@ void Mapper::mapPublishCallback()
     return;
   }
 
-  size_t num_scans;
   {
     // TODO(fergs): lock this when timer is converted to thread
     map_update_available_ = false;
-    num_scans = scans_.size();
   }
 
-  // Size of the NDT grid
-  // TODO(fergs) do this dynamically
-  double sx = 10.0;
-  double sy = 10.0;
+  // Publish an occupancy grid
+  nav_msgs::msg::OccupancyGrid grid_msg;
+  grid_msg.header.frame_id = "map";
+  grid_msg.header.stamp = this->now();
+  grid_->getMsg(scans_, corrected_poses_, grid_msg);
+  map_pub_->publish(grid_msg);
 
-  // Build an NDT from all scans
-  NDT ndt(ndt_resolution_, sx, sy, -0.5 * sx, -0.5 * sy);
-  for (size_t i = 0; i < num_scans; ++i)
-  {
-    ndt.addScan(scans_[i], corrected_poses_[i]);
-  }
-  ndt.compute();
-
-  // Build map message by sampling from NDT
-  nav_msgs::msg::OccupancyGrid grid;
-  grid.header.frame_id = "map";
-  grid.header.stamp = this->now();
-  grid.info.resolution = map_resolution_;
-  grid.info.width = sx / map_resolution_;
-  grid.info.height = sy / map_resolution_;
-  grid.info.origin.position.x = -0.5 * sx;
-  grid.info.origin.position.y = -0.5 * sy;
-  grid.data.assign(grid.info.width * grid.info.height, 0);
-  for (size_t x = 0; x < grid.info.width; ++x)
-  {
-    for (size_t y = 0; y < grid.info.height; ++y)
-    {
-      double mx = x * map_resolution_ + grid.info.origin.position.x;
-      double my = y * map_resolution_ + grid.info.origin.position.y;
-      ndt_2d::Point point(mx, my);
-      double l = ndt.likelihood(point);
-      if (l > 0.0 && l < 50.0)
-      {
-        grid.data[x + (y * grid.info.width)] = 100;
-      }
-    }
-  }
-  map_pub_->publish(grid);
+  // Publish TF
   publishTransform();
 }
 

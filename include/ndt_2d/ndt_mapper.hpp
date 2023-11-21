@@ -14,6 +14,7 @@
 #include <vector>
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
+#include <ndt_2d/occupancy_grid.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
 namespace ndt_2d
@@ -54,6 +55,9 @@ protected:
   std::vector<Pose2d> odom_poses_;
   // The corrected pose of each scan based on scan matcher, loop closure
   std::vector<Pose2d> corrected_poses_;
+
+  // Map export
+  OccupancyGridPtr grid_;
 };
 
 }  // namespace ndt_2d

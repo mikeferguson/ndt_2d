@@ -26,6 +26,7 @@ add_library(ndt_2d_lib SHARED
 # Mapping node
 add_library(ndt_2d_mapper SHARED
   src/ndt_mapper.cpp
+  src/occupancy_grid.cpp
 )
 ament_target_dependencies(ndt_2d_mapper
   angles

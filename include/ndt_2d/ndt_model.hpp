@@ -39,7 +39,7 @@ struct Pose2d
   }
 
   double x, y, theta;
-}l;
+};
 
 struct Scan
 {
