@@ -61,7 +61,7 @@ struct Cell
   using vector_t = Eigen::Matrix<double, 2, 1>;
   using matrix_t = Eigen::Matrix<double, 2, 2>;
 
-  explicit Cell();
+  Cell();
 
   /** @brief Add a point to this cell */
   void addPoint(Point & p);
@@ -101,9 +101,8 @@ public:
   /**
    * @brief Add a scan to the NDT.
    * @param scan The points from laser scanner to be added.
-   * @param pose Pose to use (we ignore the scan pose).
    */
-  void addScan(ScanPtr& scan, Pose2d& pose);
+  void addScan(ScanPtr& scan);
 
   /**
    * @brief Compute NDT cell values - this must be called after any

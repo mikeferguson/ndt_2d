@@ -53,10 +53,8 @@ protected:
   // Map data
   // Vector of scans used to build the map
   std::vector<ScanPtr> scans_;
-  // The odometry pose of each scan
+  // The odometry pose of each scan, corrected gets stored with the ScanPtr
   std::vector<Pose2d> odom_poses_;
-  // The corrected pose of each scan based on scan matcher, loop closure
-  std::vector<Pose2d> corrected_poses_;
 
   // Map export
   OccupancyGridPtr grid_;

@@ -25,16 +25,13 @@ public:
   /**
    * @brief Create an occupancy grid message from a series of scans.
    * @param scans The scans to render into the map.
-   * @param poses The origin poses for each of the scans.
    * @param grid The map message to be filled with data.
    */
   void getMsg(std::vector<ndt_2d::ScanPtr> & scans,
-              std::vector<ndt_2d::Pose2d> & poses,
               nav_msgs::msg::OccupancyGrid & grid);
 
 private:
-  void updateBounds(std::vector<ndt_2d::ScanPtr>& scans,
-                    std::vector<ndt_2d::Pose2d> & poses);
+  void updateBounds(std::vector<ndt_2d::ScanPtr>& scans);
 
   double resolution_;
   // Bounds are recalculated when scan vector increases in size

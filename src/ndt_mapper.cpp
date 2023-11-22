@@ -70,8 +70,11 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     return;
   }
 
+  // Need to convert the scan into an ndt_2d style
+  ScanPtr scan(new Scan());
+
   // Convert pose to ndt_2d style
-  Pose2d odom_pose, corrected_pose;
+  Pose2d odom_pose;
   odom_pose.x = odom_pose_tf.pose.position.x;
   odom_pose.y = odom_pose_tf.pose.position.y;
   odom_pose.theta = tf2::getYaw(odom_pose_tf.pose.orientation);
@@ -91,23 +94,22 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     }
     // Odometry and corrected frame may not be aligned - determine heading between them
     double heading = angles::shortest_angular_distance(odom_poses_.back().theta,
-                                                       corrected_poses_.back().theta);
+                                                       scans_.back()->pose.theta);
     // Now apply odometry delta, corrected by heading, to get initial corrected pose
-    corrected_pose.x = corrected_poses_.back().x + (dx * cos(heading)) - (dy * sin(heading));
-    corrected_pose.y = corrected_poses_.back().y + (dx * sin(heading)) + (dy * cos(heading));
-    corrected_pose.theta = angles::normalize_angle(corrected_poses_.back().theta + dth);
+    scan->pose.x = scans_.back()->pose.x + (dx * cos(heading)) - (dy * sin(heading));
+    scan->pose.y = scans_.back()->pose.y + (dx * sin(heading)) + (dy * cos(heading));
+    scan->pose.theta = angles::normalize_angle(scans_.back()->pose.theta + dth);
   }
   else
   {
-    // Initialize correction - start robot at origin of map
-    corrected_pose.x = 0.0;
-    corrected_pose.y = 0.0;
-    corrected_pose.theta = 0.0;
+    // Initialize corrected pose - start robot at origin of map
+    scan->pose.x = 0.0;
+    scan->pose.y = 0.0;
+    scan->pose.theta = 0.0;
   }
   RCLCPP_INFO(logger_, "Adding scan to map");
 
-  // Convert ROS msg into NDT scan
-  ScanPtr scan(new Scan());
+  // Using this scan, convert ROS msg into ndt_2d style scan
   scan->points.reserve(msg->ranges.size());
   for (size_t i = 0; i < msg->ranges.size(); ++i)
   {
@@ -128,7 +130,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     size_t start = (scans_.size() > rolling_depth_) ? scans_.size() - rolling_depth_ : 0;
     for (size_t i = start; i < scans_.size(); ++i)
     {
-      ndt.addScan(scans_[i], corrected_poses_[i]);
+      ndt.addScan(scans_[i]);
     }
     ndt.compute();
 
@@ -146,12 +148,12 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
          dth += search_angular_resolution_)
     {
       // Do orientation on the outer loop - then we can simply shift points in inner loops
-      double costh = cos(corrected_pose.theta + dth);
-      double sinth = sin(corrected_pose.theta + dth);
+      double costh = cos(scan->pose.theta + dth);
+      double sinth = sin(scan->pose.theta + dth);
       for (size_t i = 0; i < points_outer.size(); ++i)
       {
-        points_outer[i].x = scan->points[i].x * costh - scan->points[i].y * sinth + corrected_pose.x;
-        points_outer[i].y = scan->points[i].x * sinth + scan->points[i].y * costh + corrected_pose.y;
+        points_outer[i].x = scan->points[i].x * costh - scan->points[i].y * sinth + scan->pose.x;
+        points_outer[i].y = scan->points[i].x * sinth + scan->points[i].y * costh + scan->pose.y;
       }
 
       for (double dx = -search_linear_size_;
@@ -180,22 +182,21 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       }
     }
 
-    // Add correction to corrected_pose
-    corrected_pose.x += best_pose.x;
-    corrected_pose.y += best_pose.y;
-    corrected_pose.theta += best_pose.theta;
+    // Add correction to scan corrected pose
+    scan->pose.x += best_pose.x;
+    scan->pose.y += best_pose.y;
+    scan->pose.theta += best_pose.theta;
   }
 
   std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y
             << " " << odom_pose.theta << std::endl;
-  std::cout << "Corrected: " << corrected_pose.x << " " << corrected_pose.y
-            << " " << corrected_pose.theta << std::endl;
+  std::cout << "Corrected: " << scan->pose.x << " " << scan->pose.y
+            << " " << scan->pose.theta << std::endl;
 
   {
     // TODO(fergs): lock this when timer is converted to thread
     scans_.push_back(scan);
     odom_poses_.push_back(odom_pose);
-    corrected_poses_.push_back(corrected_pose);
     map_update_available_ = true;
   }
 }
@@ -203,7 +204,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 void Mapper::publishTransform()
 {
   // Latest corrected pose gives us map -> robot
-  Pose2d & corrected = corrected_poses_.back();
+  Pose2d & corrected = scans_.back()->pose;
   Eigen::Isometry3d map_to_robot(Eigen::Translation3d(corrected.x, corrected.y, 0.0) *
                                  Eigen::AngleAxisd(corrected.theta, Eigen::Vector3d::UnitZ()));
 
@@ -250,7 +251,7 @@ void Mapper::mapPublishCallback()
   nav_msgs::msg::OccupancyGrid grid_msg;
   grid_msg.header.frame_id = "map";
   grid_msg.header.stamp = this->now();
-  grid_->getMsg(scans_, corrected_poses_, grid_msg);
+  grid_->getMsg(scans_, grid_msg);
   map_pub_->publish(grid_msg);
 
   // Publish TF

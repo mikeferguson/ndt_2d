@@ -21,13 +21,12 @@ OccupancyGrid::OccupancyGrid(double resolution)
 }
 
 void OccupancyGrid::getMsg(std::vector<ndt_2d::ScanPtr> & scans,
-                           std::vector<ndt_2d::Pose2d> & poses,
                            nav_msgs::msg::OccupancyGrid & grid)
 {
   // Update size of the occupancy grid, if needed
   if (scans.size() != num_scans_)
   {
-    updateBounds(scans, poses);
+    updateBounds(scans);
   }
 
   // Pad the map just a bit
@@ -47,14 +46,14 @@ void OccupancyGrid::getMsg(std::vector<ndt_2d::ScanPtr> & scans,
   std::vector<int> hit(grid.data.size(), 0);
 
   // Render scans into grid
-  for (size_t i = 0; i < scans.size(); ++i)
+  for (auto & scan : scans)
   {
-    double x = poses[i].x;
-    double y = poses[i].y;
-    double cos_th = cos(poses[i].theta);
-    double sin_th = sin(poses[i].theta);
+    double x = scan->pose.x;
+    double y = scan->pose.y;
+    double cos_th = cos(scan->pose.theta);
+    double sin_th = sin(scan->pose.theta);
 
-    for (auto & point : scans[i]->points)
+    for (auto & point : scan->points)
     {
       Point p(x, y);
       p.x += point.x * cos_th - point.y * sin_th;
@@ -78,8 +77,7 @@ void OccupancyGrid::getMsg(std::vector<ndt_2d::ScanPtr> & scans,
   }
 }
 
-void OccupancyGrid::updateBounds(std::vector<ndt_2d::ScanPtr>& scans,
-                                 std::vector<ndt_2d::Pose2d> & poses)
+void OccupancyGrid::updateBounds(std::vector<ndt_2d::ScanPtr>& scans)
 {
   size_t start_idx = num_scans_;
   num_scans_ = scans.size();
@@ -87,10 +85,10 @@ void OccupancyGrid::updateBounds(std::vector<ndt_2d::ScanPtr>& scans,
   // Iterate through new scans
   for (size_t i = start_idx; i < num_scans_; ++i)
   {
-    double x = poses[i].x;
-    double y = poses[i].y;
-    double cos_th = cos(poses[i].theta);
-    double sin_th = sin(poses[i].theta);
+    double x = scans[i]->pose.x;
+    double y = scans[i]->pose.y;
+    double cos_th = cos(scans[i]->pose.theta);
+    double sin_th = sin(scans[i]->pose.theta);
 
     // Iterate through points in the scan
     for (auto & point : scans[i]->points)

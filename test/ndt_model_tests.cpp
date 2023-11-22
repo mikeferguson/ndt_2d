@@ -58,10 +58,9 @@ TEST(NdtModelTests, test_ndt)
 
   // Create a scan to input
   ndt_2d::ScanPtr scan(new ndt_2d::Scan());
-  ndt_2d::Pose2d pose;
-  pose.x = 0.0;
-  pose.y = 0.0;
-  pose.theta = 0.0;
+  scan->pose.x = 0.0;
+  scan->pose.y = 0.0;
+  scan->pose.theta = 0.0;
   ndt_2d::Point p(3.5, 3.5);
   scan->points.push_back(p);
   p.x = 3.45;
@@ -72,7 +71,7 @@ TEST(NdtModelTests, test_ndt)
   scan->points.push_back(p);
 
   // Update NDT
-  ndt.addScan(scan, pose);
+  ndt.addScan(scan);
   ndt.compute();
 
   // Build vector of points to score

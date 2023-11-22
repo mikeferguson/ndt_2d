@@ -3,10 +3,10 @@
  * All Rights Reserved
  */
 
-#include <iostream>
-
 #include <Eigen/Core>
 #include <Eigen/Eigen>
+#include <iostream>
+
 #include <cmath>
 #include <ndt_2d/ndt_model.hpp>
 
@@ -100,16 +100,16 @@ NDT::~NDT()
 {
 }
 
-void NDT::addScan(ScanPtr& scan, Pose2d& pose)
+void NDT::addScan(ScanPtr& scan)
 {
   // Precompute transforms
-  double cos_th = cos(pose.theta);
-  double sin_th = sin(pose.theta);
+  double cos_th = cos(scan->pose.theta);
+  double sin_th = sin(scan->pose.theta);
 
   for (auto & point : scan->points)
   {
     // Transform the point by pose
-    Point p(pose.x, pose.y);
+    Point p(scan->pose.x, scan->pose.y);
     p.x += point.x * cos_th - point.y * sin_th;
     p.y += point.x * sin_th + point.y * cos_th;
 
