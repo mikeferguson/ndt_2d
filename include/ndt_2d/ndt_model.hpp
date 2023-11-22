@@ -51,8 +51,12 @@ struct Pose2d
 
 struct Scan
 {
-  std::vector<Point> points;
+  // Unique ID of the scan
+  size_t id;
+  // Pose of scan in the "map" frame
   Pose2d pose;
+  // Points that form the laser scan
+  std::vector<Point> points;
 };
 typedef std::shared_ptr<Scan> ScanPtr;
 
@@ -130,6 +134,13 @@ public:
    * @returns The probability of the point.
    */
   double likelihood(const Point& point);
+
+  /**
+   * @brief Query the NDT.
+   * @param scan The scan to score. Note that pose WILL be used.
+   * @returns The probability of the scan.
+   */
+  double likelihood(const ScanPtr& scan);
 
 private:
   /**

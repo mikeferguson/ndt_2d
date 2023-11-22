@@ -34,6 +34,10 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   search_angular_size_ = this->declare_parameter<double>("search_angular_size", 0.1);
   search_linear_resolution_ = this->declare_parameter<double>("search_linear_resolution", 0.005);
   search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
+  global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
+
+  // Negative value indicates that we should use the sensor max range
+  range_max_ = this->declare_parameter<double>("max_range", -1.0);
 
   tf2_buffer_ = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
@@ -55,6 +59,12 @@ Mapper::~Mapper()
 
 void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg)
 {
+  // Make sure that we have valid max_range
+  if (range_max_ < 0)
+  {
+    range_max_ = msg->range_max;
+  }
+
   // Find pose of the robot in odometry frame
   geometry_msgs::msg::PoseStamped odom_pose_tf;
   odom_pose_tf.header = msg->header;
@@ -72,6 +82,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
   // Need to convert the scan into an ndt_2d style
   ScanPtr scan(new Scan());
+  scan->id = scans_.size();
 
   // Convert pose to ndt_2d style
   Pose2d odom_pose;
@@ -113,8 +124,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   scan->points.reserve(msg->ranges.size());
   for (size_t i = 0; i < msg->ranges.size(); ++i)
   {
-    // Filter out NANs
-    if (std::isnan(msg->ranges[i])) continue;
+    // Filter out NANs and scans beyond max range
+    if (std::isnan(msg->ranges[i]) || msg->ranges[i] > range_max_) continue;
     // Project point and push into scan
     double angle = msg->angle_min + i * msg->angle_increment;
     Point point(cos(angle) * msg->ranges[i],
@@ -124,20 +135,25 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
   if (!odom_poses_.empty())
   {
-    // Match new scan against last 10 scans
-    auto end = scans_.end();
-    auto begin = end;
-    for (size_t i = 0; i < 10; ++i)
-    {
-      if (begin == scans_.begin()) break;
-      --begin;
-    }
+    // Determine rolling window
+    size_t rolling_start = (scans_.size() <= rolling_depth_) ? 0 : scans_.size() - 10;
+    auto rolling = scans_.begin() + rolling_start;
+
+    // Build NDT of rolling window scans
+    std::shared_ptr<NDT> ndt;
+    buildNDT(rolling, scans_.end(), ndt);
+
+    // Local consistency - match new scan against last 10 scans
     Pose2d correction;
-    matchScans(begin, end, scan, correction);
+    double score = matchScan(ndt, scan, correction);
+    std::cout << "  Local match score: " << score << " at " << correction.x << ", " << correction.y << ", " << correction.theta << std::endl;
     // Add correction to scan corrected pose
     scan->pose.x += correction.x;
     scan->pose.y += correction.y;
     scan->pose.theta += correction.theta;
+
+    // Global consistency - search scans for global matches
+    searchGlobalMatches(scan);
   }
 
   std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y
@@ -145,6 +161,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   std::cout << "Corrected: " << scan->pose.x << " " << scan->pose.y
             << " " << scan->pose.theta << std::endl;
 
+  // Append new scan to our graph
   {
     // TODO(fergs): lock this when timer is converted to thread
     scans_.push_back(scan);
@@ -153,19 +170,37 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   }
 }
 
-double Mapper::matchScans(const std::vector<ScanPtr>::iterator& scans_begin,
-                          const std::vector<ScanPtr>::iterator& scans_end,
-                          ScanPtr & scan, Pose2d & pose)
+void Mapper::buildNDT(const std::vector<ScanPtr>::const_iterator& begin,
+                      const std::vector<ScanPtr>::const_iterator& end,
+                      std::shared_ptr<NDT> & ndt)
 {
-  // Build an NDT of the last several scans
-  double ndt_size = 10.0;
-  NDT ndt(ndt_resolution_, ndt_size, ndt_size, -0.5 * ndt_size, -0.5 * ndt_size);
-  for (std::vector<ScanPtr>::const_iterator scan = scans_begin; scan != scans_end; ++scan)
+  // Compute bounding box required
+  double min_x_ = std::numeric_limits<double>::max();
+  double max_x_ = std::numeric_limits<double>::min();
+  double min_y_ = std::numeric_limits<double>::max();
+  double max_y_ = std::numeric_limits<double>::min();
+  for (auto scan = begin; scan != end; ++scan)
   {
-    ndt.addScan(*scan);
+    min_x_ = std::min((*scan)->pose.x - range_max_, min_x_);
+    max_x_ = std::max((*scan)->pose.x + range_max_, max_x_);
+    min_y_ = std::min((*scan)->pose.y - range_max_, min_y_);
+    max_y_ = std::max((*scan)->pose.y + range_max_, max_x_);
   }
-  ndt.compute();
 
+  std::cout << "Building NDT: " << (max_x_ - min_x_) << "," << (max_y_ - min_y_) << " " << min_x_ << "," << min_y_ << std::endl;
+
+  ndt = std::make_shared<NDT>(ndt_resolution_, (max_x_ - min_x_), (max_y_ - min_y_), min_x_, min_y_);
+  for (auto scan = begin; scan != end; ++scan)
+  {
+    ndt->addScan(*scan);
+  }
+
+  ndt->compute();
+}
+
+double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
+                         const ScanPtr & scan, Pose2d & pose)
+{
   // Search NDT for best correlation for new scan
   double best_score = 0;
 
@@ -201,7 +236,7 @@ double Mapper::matchScans(const std::vector<ScanPtr>::iterator& scans_begin,
           points_inner[i].y = points_outer[i].y + dy;
         }
 
-        double likelihood = -ndt.likelihood(points_inner);
+        double likelihood = -ndt->likelihood(points_inner);
         if (likelihood < best_score)
         {
           best_score = likelihood;
@@ -214,6 +249,46 @@ double Mapper::matchScans(const std::vector<ScanPtr>::iterator& scans_begin,
   }
 
   return best_score;
+}
+
+void Mapper::searchGlobalMatches(ScanPtr & scan)
+{
+  // Determine where rolling window starts
+  size_t rolling_start = (scans_.size() <= rolling_depth_) ? 0 : scans_.size() - 10;
+  auto rolling = scans_.begin() + rolling_start;
+
+  // TODO(fergs): apply a real NN search
+  for (auto candidate = scans_.begin(); candidate != rolling; ++candidate)
+  {
+    // Compute distance between candidate and scan
+    // TODO(fergs): do this with barycentric coordinates
+    double dx = scan->pose.x - (*candidate)->pose.x;
+    double dy = scan->pose.y - (*candidate)->pose.y;
+    double d = (dx * dx) + (dy * dy);
+
+    // If distance is too far apart, do not attempt to scan match
+    if (d > global_search_size_ * global_search_size_)
+    {
+      continue;
+    }
+
+    // Take one additional scan on either side of candidate
+    auto begin = (candidate == scans_.begin()) ? candidate : --candidate;
+    auto end = (candidate == rolling) ? candidate : ++candidate;
+
+    // Build NDT of candidate region
+    std::shared_ptr<NDT> ndt;
+    buildNDT(begin, end, ndt);
+
+    // Compute score for scan at current pose
+    double uncorrected_score = -ndt->likelihood(scan);
+
+    // Try to match scans
+    Pose2d correction;
+    double score = matchScan(ndt, scan, correction);
+    std::cout << "Comparing " << (*candidate)->id << " against " << scan->id << " for loop closure" << std::endl;
+    std::cout << "  Global match score: " << score << " vs " << uncorrected_score << std::endl;
+  }
 }
 
 void Mapper::publishTransform()

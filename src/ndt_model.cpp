@@ -160,6 +160,17 @@ double NDT::likelihood(const Point& point)
   return 0.0;
 }
 
+double NDT::likelihood(const ScanPtr& scan)
+{
+  double score = 0.0;
+  for (auto & point : scan->points)
+  {
+    Point p(point.x + scan->pose.x, point.y + scan->pose.y);
+    score += likelihood(p);
+  }
+  return score;
+}
+
 int NDT::getIndex(double x, double y)
 {
   if (x < origin_x_ || y < origin_y_)

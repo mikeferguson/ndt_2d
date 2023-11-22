@@ -27,11 +27,31 @@ public:
   virtual ~Mapper();
 
 protected:
+  /** @brief ROS callback for new laser scan */
   void laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg);
-  double matchScans(const std::vector<ScanPtr>::iterator& scans_begin,
-                    const std::vector<ScanPtr>::iterator& scans_end,
-                    ScanPtr & scan,
-                    Pose2d & pose);
+
+  /**
+   * @brief Build an NDT map from a set of scans.
+   * @param begin Starting iterator of scans for NDT map building.
+   * @param end Ending iterator of scans for NDT map building.
+   * @param ndt Shared pointer to the NDT map built.
+   */
+  void buildNDT(const std::vector<ScanPtr>::const_iterator & begin,
+                const std::vector<ScanPtr>::const_iterator & end,
+                std::shared_ptr<NDT> & ndt);
+
+  /**
+   * @brief Match a scan against an NDT map.
+   * @param ndt Map to match scan against.
+   * @param scan Scan to match against NDT map.
+   * @param pose The corrected pose that best matches scan to NDT map.
+   * @returns The likelihood score when scan is at corrected pose.
+   */
+  double matchScan(const std::shared_ptr<NDT> & ndt,
+                   const ScanPtr & scan,
+                   Pose2d & pose);
+
+  void searchGlobalMatches(ScanPtr & scan);
   void publishTransform();
   void mapPublishCallback();
   bool map_update_available_;
@@ -44,6 +64,8 @@ protected:
   std::string odom_frame_;
   double search_angular_resolution_, search_angular_size_;
   double search_linear_resolution_, search_linear_size_;
+  double global_search_size_;
+  double range_max_;
 
   // ROS 2 interfaces
   rclcpp::Logger logger_;
