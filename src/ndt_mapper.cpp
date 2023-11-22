@@ -65,7 +65,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   }
   catch (const tf2::TransformException& ex)
   {
-    RCLCPP_ERROR(logger_, "Could not transform odom pose.");
+    RCLCPP_ERROR(logger_, "Could not transform %s to %s frame.",
+                 msg->header.frame_id.c_str(), odom_frame_.c_str());
     return;
   }
 
