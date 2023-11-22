@@ -28,6 +28,10 @@ public:
 
 protected:
   void laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg);
+  double matchScans(const std::vector<ScanPtr>::iterator& scans_begin,
+                    const std::vector<ScanPtr>::iterator& scans_end,
+                    ScanPtr & scan,
+                    Pose2d & pose);
   void publishTransform();
   void mapPublishCallback();
   bool map_update_available_;

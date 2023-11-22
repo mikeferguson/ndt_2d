@@ -64,13 +64,13 @@ struct Cell
   Cell();
 
   /** @brief Add a point to this cell */
-  void addPoint(Point & p);
+  void addPoint(const Point & p);
 
   /** @brief Compute the cell values */
   void compute();
 
   /** @brief Score a point */
-  double score(Point & p);
+  double score(const Point & p);
 
   // Are mean/cov valid;
   bool valid;
@@ -102,7 +102,7 @@ public:
    * @brief Add a scan to the NDT.
    * @param scan The points from laser scanner to be added.
    */
-  void addScan(ScanPtr& scan);
+  void addScan(const ScanPtr& scan);
 
   /**
    * @brief Compute NDT cell values - this must be called after any
@@ -115,21 +115,21 @@ public:
    * @param points The vector of points to score.
    * @returns The probability of the points.
    */
-  double likelihood(std::vector<Point>& points);
+  double likelihood(const std::vector<Point>& points);
 
   /**
    * @brief Query the NDT. Typically used to create occupancy grid.
    * @param points The vector of points to score.
    * @param scores The score for each point.
    */
-  void likelihood(std::vector<Point>& points, std::vector<double>& scores);
+  void likelihood(const std::vector<Point>& points, std::vector<double>& scores);
 
   /**
    * @brief Query the NDT.
    * @param point The point to score.
    * @returns The probability of the point.
    */
-  double likelihood(Point& point);
+  double likelihood(const Point& point);
 
 private:
   /**

@@ -124,68 +124,20 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
   if (!odom_poses_.empty())
   {
-    // Build an NDT of the last several scans
-    double ndt_size = 10.0;
-    NDT ndt(ndt_resolution_, ndt_size, ndt_size, -0.5 * ndt_size, -0.5 * ndt_size);
-    size_t start = (scans_.size() > rolling_depth_) ? scans_.size() - rolling_depth_ : 0;
-    for (size_t i = start; i < scans_.size(); ++i)
+    // Match new scan against last 10 scans
+    auto end = scans_.end();
+    auto begin = end;
+    for (size_t i = 0; i < 10; ++i)
     {
-      ndt.addScan(scans_[i]);
+      if (begin == scans_.begin()) break;
+      --begin;
     }
-    ndt.compute();
-
-    // Search NDT for best correlation for new scan
-    Pose2d best_pose;
-    double best_score = 0;
-
-    std::vector<Point> points_outer;
-    std::vector<Point> points_inner;
-    points_outer.resize(scan->points.size());
-    points_inner.resize(scan->points.size());
-
-    for (double dth = -search_angular_size_;
-         dth < search_angular_size_;
-         dth += search_angular_resolution_)
-    {
-      // Do orientation on the outer loop - then we can simply shift points in inner loops
-      double costh = cos(scan->pose.theta + dth);
-      double sinth = sin(scan->pose.theta + dth);
-      for (size_t i = 0; i < points_outer.size(); ++i)
-      {
-        points_outer[i].x = scan->points[i].x * costh - scan->points[i].y * sinth + scan->pose.x;
-        points_outer[i].y = scan->points[i].x * sinth + scan->points[i].y * costh + scan->pose.y;
-      }
-
-      for (double dx = -search_linear_size_;
-           dx < search_linear_size_;
-           dx += search_linear_resolution_)
-      {
-        for (double dy = -search_linear_size_;
-             dy < search_linear_size_;
-             dy += search_linear_resolution_)
-        {
-          for (size_t i = 0; i < points_inner.size(); ++i)
-          {
-            points_inner[i].x = points_outer[i].x + dx;
-            points_inner[i].y = points_outer[i].y + dy;
-          }
-
-          double likelihood = -ndt.likelihood(points_inner);
-          if (likelihood < best_score)
-          {
-            best_score = likelihood;
-            best_pose.x = dx;
-            best_pose.y = dy;
-            best_pose.theta = dth;
-          }
-        }
-      }
-    }
-
+    Pose2d correction;
+    matchScans(begin, end, scan, correction);
     // Add correction to scan corrected pose
-    scan->pose.x += best_pose.x;
-    scan->pose.y += best_pose.y;
-    scan->pose.theta += best_pose.theta;
+    scan->pose.x += correction.x;
+    scan->pose.y += correction.y;
+    scan->pose.theta += correction.theta;
   }
 
   std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y
@@ -199,6 +151,69 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     odom_poses_.push_back(odom_pose);
     map_update_available_ = true;
   }
+}
+
+double Mapper::matchScans(const std::vector<ScanPtr>::iterator& scans_begin,
+                          const std::vector<ScanPtr>::iterator& scans_end,
+                          ScanPtr & scan, Pose2d & pose)
+{
+  // Build an NDT of the last several scans
+  double ndt_size = 10.0;
+  NDT ndt(ndt_resolution_, ndt_size, ndt_size, -0.5 * ndt_size, -0.5 * ndt_size);
+  for (std::vector<ScanPtr>::const_iterator scan = scans_begin; scan != scans_end; ++scan)
+  {
+    ndt.addScan(*scan);
+  }
+  ndt.compute();
+
+  // Search NDT for best correlation for new scan
+  double best_score = 0;
+
+  std::vector<Point> points_outer;
+  std::vector<Point> points_inner;
+  points_outer.resize(scan->points.size());
+  points_inner.resize(scan->points.size());
+
+  for (double dth = -search_angular_size_;
+       dth < search_angular_size_;
+       dth += search_angular_resolution_)
+  {
+    // Do orientation on the outer loop - then we can simply shift points in inner loops
+    double costh = cos(scan->pose.theta + dth);
+    double sinth = sin(scan->pose.theta + dth);
+    for (size_t i = 0; i < points_outer.size(); ++i)
+    {
+      points_outer[i].x = scan->points[i].x * costh - scan->points[i].y * sinth + scan->pose.x;
+      points_outer[i].y = scan->points[i].x * sinth + scan->points[i].y * costh + scan->pose.y;
+    }
+
+    for (double dx = -search_linear_size_;
+         dx < search_linear_size_;
+         dx += search_linear_resolution_)
+    {
+      for (double dy = -search_linear_size_;
+           dy < search_linear_size_;
+           dy += search_linear_resolution_)
+      {
+        for (size_t i = 0; i < points_inner.size(); ++i)
+        {
+          points_inner[i].x = points_outer[i].x + dx;
+          points_inner[i].y = points_outer[i].y + dy;
+        }
+
+        double likelihood = -ndt.likelihood(points_inner);
+        if (likelihood < best_score)
+        {
+          best_score = likelihood;
+          pose.x = dx;
+          pose.y = dy;
+          pose.theta = dth;
+        }
+      }
+    }
+  }
+
+  return best_score;
 }
 
 void Mapper::publishTransform()

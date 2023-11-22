@@ -23,7 +23,7 @@ Cell::Cell()
 {
 }
 
-void Cell::addPoint(Point & point)
+void Cell::addPoint(const Point & point)
 {
   // TODO(fergs): take Eigen type directly
   vector_t p;
@@ -67,7 +67,7 @@ void Cell::compute()
   valid = true;
 }
 
-double Cell::score(Point & point)
+double Cell::score(const Point & point)
 {
   if (n < 3)
   {
@@ -100,7 +100,7 @@ NDT::~NDT()
 {
 }
 
-void NDT::addScan(ScanPtr& scan)
+void NDT::addScan(const ScanPtr& scan)
 {
   // Precompute transforms
   double cos_th = cos(scan->pose.theta);
@@ -130,7 +130,7 @@ void NDT::compute()
   }
 }
 
-double NDT::likelihood(std::vector<Point>& points)
+double NDT::likelihood(const std::vector<Point>& points)
 {
   double score = 0.0;
   for (auto & point : points)
@@ -140,7 +140,7 @@ double NDT::likelihood(std::vector<Point>& points)
   return score;
 }
 
-void NDT::likelihood(std::vector<Point>& points, std::vector<double>& scores)
+void NDT::likelihood(const std::vector<Point>& points, std::vector<double>& scores)
 {
   scores.clear();
   scores.reserve(points.size());
@@ -150,7 +150,7 @@ void NDT::likelihood(std::vector<Point>& points, std::vector<double>& scores)
   }
 }
 
-double NDT::likelihood(Point& point)
+double NDT::likelihood(const Point& point)
 {
   int index = getIndex(point.x, point.y);
   if (index >= 0)
