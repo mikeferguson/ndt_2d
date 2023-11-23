@@ -16,24 +16,24 @@ namespace ndt_2d
 Cell::Cell()
 : valid(false),
   n(0),
-  mean(vector_t::Zero()),
-  covariance(matrix_t::Zero()),
-  correlation(matrix_t::Zero()),
-  information(matrix_t::Zero())
+  mean(Eigen::Vector2d::Zero()),
+  covariance(Eigen::Matrix2d::Zero()),
+  correlation(Eigen::Matrix2d::Zero()),
+  information(Eigen::Matrix2d::Zero())
 {
 }
 
 void Cell::addPoint(const Point & point)
 {
   // TODO(fergs): take Eigen type directly
-  vector_t p;
+  Eigen::Vector2d p;
   p(0) = point.x;
   p(1) = point.y;
 
   mean = (mean * n + p) / (n + 1);
-  for (size_t i = 0; i < 3; ++i)
+  for (size_t i = 0; i < 2; ++i)
   {
-    for (size_t j = i; j < 3; ++j)
+    for (size_t j = i; j < 2; ++j)
     {
       correlation(i, j) = (correlation(i, j) * n + p(i) * p(j)) / (n + 1);
     }
@@ -52,9 +52,9 @@ void Cell::compute()
   }
 
   const double scale = n / (n - 1);
-  for (size_t i = 0; i < 3; ++i)
+  for (size_t i = 0; i < 2; ++i)
   {
-    for (size_t j = 0; j < 3; ++j)
+    for (size_t j = 0; j < 2; ++j)
     {
       covariance(i, j) = (correlation(i, j) - (mean(i) * mean(j))) * scale;
       covariance(j, i) = correlation(i, j);
@@ -76,7 +76,7 @@ double Cell::score(const Point & point)
   }
 
   // TODO(fergs): take Eigen type directly
-  vector_t p;
+  Eigen::Vector2d p;
   p(0) = point.x;
   p(1) = point.y;
 

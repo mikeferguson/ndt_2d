@@ -27,6 +27,7 @@ struct Point
     this->y = y;
   }
 
+  // Point location, in meters
   double x, y;
 };
 
@@ -46,7 +47,10 @@ struct Pose2d
     this->theta = theta;
   }
 
-  double x, y, theta;
+  // Pose position in meters
+  double x, y;
+  // Pose orientation in radians
+  double theta;
 };
 
 struct Scan
@@ -62,9 +66,6 @@ typedef std::shared_ptr<Scan> ScanPtr;
 
 struct Cell
 {
-  using vector_t = Eigen::Matrix<double, 2, 1>;
-  using matrix_t = Eigen::Matrix<double, 2, 2>;
-
   Cell();
 
   /** @brief Add a point to this cell */
@@ -81,10 +82,10 @@ struct Cell
 
   // Technically this should be size_t - but for Eigen math, needs to be double
   double n;
-  vector_t mean;
-  matrix_t covariance;
-  matrix_t correlation;
-  matrix_t information;
+  Eigen::Vector2d mean;
+  Eigen::Matrix2d covariance;
+  Eigen::Matrix2d correlation;
+  Eigen::Matrix2d information;
 };
 
 class NDT
