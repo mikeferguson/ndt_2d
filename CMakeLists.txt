@@ -9,6 +9,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(angles REQUIRED)
 find_package(Ceres REQUIRED)
+find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -27,11 +28,7 @@ add_library(ndt_2d_lib SHARED
   src/ceres_solver.cpp
   src/ndt_model.cpp
 )
-target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES})
-# TODO: this is a super hacky way of getting Eigen dependency into library - do this correctly
-ament_target_dependencies(ndt_2d_lib
-  tf2_geometry_msgs
-)
+target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES} Eigen3::Eigen)
 
 # Mapping node
 add_library(ndt_2d_mapper SHARED
