@@ -15,6 +15,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
+#include <ndt_2d/ceres_solver.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
 namespace ndt_2d
@@ -81,6 +82,12 @@ protected:
   std::vector<ScanPtr> scans_;
   // The previous odometry pose, corrected gets stored with the ScanPtr
   Pose2d prev_odom_pose_;
+  // Graph constraints
+  std::vector<ConstraintPtr> odom_constraints_;
+  std::vector<ConstraintPtr> loop_constraints_;
+
+  // Graph optimization
+  std::shared_ptr<CeresSolver> solver_;
 
   // Map export
   OccupancyGridPtr grid_;

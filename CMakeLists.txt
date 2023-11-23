@@ -8,6 +8,7 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(angles REQUIRED)
+find_package(Ceres REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -16,12 +17,17 @@ find_package(sensor_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
-include_directories(include)
+include_directories(
+  include
+  ${CERES_INCLUDES}
+)
 
 # Primary ROS-agnostic library
 add_library(ndt_2d_lib SHARED
+  src/ceres_solver.cpp
   src/ndt_model.cpp
 )
+target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES})
 # TODO: this is a super hacky way of getting Eigen dependency into library - do this correctly
 ament_target_dependencies(ndt_2d_lib
   tf2_geometry_msgs
@@ -56,6 +62,10 @@ if(BUILD_TESTING)
   ament_add_gtest(ndt_model_tests test/ndt_model_tests.cpp)
   target_link_libraries(ndt_model_tests ndt_2d_lib)
   ament_target_dependencies(ndt_model_tests ${dependencies})
+
+  ament_add_gtest(ceres_solver_tests test/ceres_solver_tests.cpp)
+  target_link_libraries(ceres_solver_tests ndt_2d_lib)
+  ament_target_dependencies(ceres_solver_tests ${dependencies})
 endif()
 
 install(

@@ -64,6 +64,16 @@ struct Scan
 };
 typedef std::shared_ptr<Scan> ScanPtr;
 
+struct Constraint
+{
+  size_t begin;
+  size_t end;
+  // dx, dy, dtheta between begin and end poses
+  Eigen::Vector3d transform;
+  Eigen::Matrix3d information;
+};
+typedef std::shared_ptr<Constraint> ConstraintPtr;
+
 struct Cell
 {
   Cell();

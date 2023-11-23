@@ -36,6 +36,9 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
   global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
 
+  // TODO(fergs): Load ROS params for solver
+  solver_ = std::make_shared<CeresSolver>();
+
   // Negative value indicates that we should use the sensor max range
   range_max_ = this->declare_parameter<double>("max_range", -1.0);
 
@@ -118,6 +121,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->pose.y = 0.0;
     scan->pose.theta = 0.0;
   }
+
   RCLCPP_INFO(logger_, "Adding scan to map");
 
   // Using this scan, convert ROS msg into ndt_2d style scan
@@ -133,6 +137,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->points.push_back(point);
   }
 
+  RCLCPP_INFO(logger_, "Odom pose: %f, %f, %f", odom_pose.x, odom_pose.y, odom_pose.theta);
+
   if (!scans_.empty())
   {
     // Determine rolling window
@@ -146,7 +152,9 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     // Local consistency - match new scan against last 10 scans
     Pose2d correction;
     double score = matchScan(ndt, scan, correction);
-    std::cout << "  Local match score: " << score << " at " << correction.x << ", " << correction.y << ", " << correction.theta << std::endl;
+    RCLCPP_INFO(logger_, "           %f, %f, %f (%f)",
+                correction.x, correction.y, correction.theta, score);
+
     // Add correction to scan corrected pose
     scan->pose.x += correction.x;
     scan->pose.y += correction.y;
@@ -156,14 +164,23 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     searchGlobalMatches(scan);
   }
 
-  std::cout << "Odom pose: " << odom_pose.x << " " << odom_pose.y
-            << " " << odom_pose.theta << std::endl;
-  std::cout << "Corrected: " << scan->pose.x << " " << scan->pose.y
-            << " " << scan->pose.theta << std::endl;
+  RCLCPP_INFO(logger_, "Corrected: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
 
-  // Append new scan to our graph
+  // TODO(fergs): lock this when timer is converted to thread
   {
-    // TODO(fergs): lock this when timer is converted to thread
+    // Add odom constraint to the graph
+    if (!scans_.empty())
+    {
+      ConstraintPtr constraint = std::make_shared<Constraint>();
+      constraint->begin = scans_.size() - 1;
+      constraint->end = scan->id;
+      constraint->transform(0) = scan->pose.x - scans_.back()->pose.x;
+      constraint->transform(0) = scan->pose.y - scans_.back()->pose.y;
+      constraint->transform(0) = scan->pose.theta - scans_.back()->pose.theta;
+      // TODO(fergs): add information matrix
+      odom_constraints_.push_back(constraint);
+    }
+    // Append new scan to our graph
     scans_.push_back(scan);
     prev_odom_pose_ = odom_pose;
     map_update_available_ = true;
@@ -288,6 +305,21 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
     double score = matchScan(ndt, scan, correction);
     std::cout << "Comparing " << (*candidate)->id << " against " << scan->id << " for loop closure" << std::endl;
     std::cout << "  Global match score: " << score << " vs " << uncorrected_score << std::endl;
+
+    if (score < uncorrected_score)
+    {
+      // Add constraint to the graph
+      ConstraintPtr constraint = std::make_shared<Constraint>();
+      constraint->begin = scan->id;
+      constraint->end = (*candidate)->id;
+      constraint->transform(0) = (*candidate)->pose.x - scan->pose.x;
+      constraint->transform(0) = (*candidate)->pose.y - scan->pose.y;
+      constraint->transform(0) = (*candidate)->pose.theta - scan->pose.theta;
+      // TODO(fergs): add information matrix
+      loop_constraints_.push_back(constraint);
+      // TODO(fergs): only run this occasionally?
+      solver_->optimize(odom_constraints_, loop_constraints_, scans_);
+    }
   }
 }
 
