@@ -91,12 +91,12 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   odom_pose.theta = tf2::getYaw(odom_pose_tf.pose.orientation);
 
   // Make sure we have traveled far enough
-  if (!odom_poses_.empty())
+  if (!scans_.empty())
   {
     // Calculate delta in odometry frame
-    double dx = odom_pose.x - odom_poses_.back().x;
-    double dy = odom_pose.y - odom_poses_.back().y;
-    double dth = angles::shortest_angular_distance(odom_poses_.back().theta, odom_pose.theta);
+    double dx = odom_pose.x - prev_odom_pose_.x;
+    double dy = odom_pose.y - prev_odom_pose_.y;
+    double dth = angles::shortest_angular_distance(prev_odom_pose_.theta, odom_pose.theta);
     double dist = (dx * dx) + (dy * dy);
     if (dist < minimum_travel_distance_ * minimum_travel_distance_ &&
         std::fabs(dth) < minimum_travel_rotation_)
@@ -104,7 +104,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       return;
     }
     // Odometry and corrected frame may not be aligned - determine heading between them
-    double heading = angles::shortest_angular_distance(odom_poses_.back().theta,
+    double heading = angles::shortest_angular_distance(prev_odom_pose_.theta,
                                                        scans_.back()->pose.theta);
     // Now apply odometry delta, corrected by heading, to get initial corrected pose
     scan->pose.x = scans_.back()->pose.x + (dx * cos(heading)) - (dy * sin(heading));
@@ -133,7 +133,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->points.push_back(point);
   }
 
-  if (!odom_poses_.empty())
+  if (!scans_.empty())
   {
     // Determine rolling window
     size_t rolling_start = (scans_.size() <= rolling_depth_) ? 0 : scans_.size() - 10;
@@ -165,7 +165,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   {
     // TODO(fergs): lock this when timer is converted to thread
     scans_.push_back(scan);
-    odom_poses_.push_back(odom_pose);
+    prev_odom_pose_ = odom_pose;
     map_update_available_ = true;
   }
 }
@@ -299,7 +299,7 @@ void Mapper::publishTransform()
                                  Eigen::AngleAxisd(corrected.theta, Eigen::Vector3d::UnitZ()));
 
   // Latest odom pose gives us odom -> robot
-  Pose2d & odom = odom_poses_.back();
+  Pose2d & odom = prev_odom_pose_;
   Eigen::Isometry3d odom_to_robot(Eigen::Translation3d(odom.x, odom.y, 0.0) *
                                   Eigen::AngleAxisd(odom.theta, Eigen::Vector3d::UnitZ()));
 
@@ -324,7 +324,7 @@ void Mapper::mapPublishCallback()
 {
   if (!map_update_available_)
   {
-    if (!odom_poses_.empty())
+    if (!scans_.empty())
     {
       publishTransform();
     }
