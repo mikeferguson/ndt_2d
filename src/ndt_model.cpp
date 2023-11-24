@@ -5,7 +5,6 @@
 
 #include <Eigen/Core>
 #include <Eigen/Eigen>
-#include <iostream>
 
 #include <cmath>
 #include <ndt_2d/ndt_model.hpp>
@@ -93,7 +92,6 @@ NDT::NDT(double cell_size, double size_x, double size_y, double origin_x, double
   origin_x_ = origin_x;
   origin_y_ = origin_y;
   cells_.resize(size_x_ * size_y_);
-  std::cout << "Created an NDT of " << size_x_ << " by " << size_y_ << " cells" << std::endl;
 }
 
 NDT::~NDT()
