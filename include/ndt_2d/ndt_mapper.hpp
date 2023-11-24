@@ -14,8 +14,9 @@
 #include <vector>
 #include <rclcpp/rclcpp.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
-#include <ndt_2d/occupancy_grid.hpp>
 #include <ndt_2d/ceres_solver.hpp>
+#include <ndt_2d/graph.hpp>
+#include <ndt_2d/occupancy_grid.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 
 namespace ndt_2d
@@ -78,13 +79,9 @@ protected:
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf2_broadcaster_;
 
   // Map data
-  // Vector of scans used to build the map
-  std::vector<ScanPtr> scans_;
+  Graph graph_;
   // The previous odometry pose, corrected gets stored with the ScanPtr
   Pose2d prev_odom_pose_;
-  // Graph constraints
-  std::vector<ConstraintPtr> odom_constraints_;
-  std::vector<ConstraintPtr> loop_constraints_;
 
   // Graph optimization
   std::shared_ptr<CeresSolver> solver_;
