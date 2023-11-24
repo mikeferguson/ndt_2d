@@ -3,6 +3,7 @@
  * All Rights Reserved
  */
 
+#include <iostream>
 #include <ndt_2d/ceres_solver.hpp>
 #include <ndt_2d/ceres_solver_pose.hpp>
 
@@ -10,12 +11,18 @@ namespace ndt_2d
 {
 CeresSolver::CeresSolver()
 : num_odom_constraints_(0),
-  num_loop_constraints_(0)
+  num_loop_constraints_(0),
+  verbose_(false)
 {
   options_.max_num_iterations = 100;
   options_.linear_solver_type = ceres::SPARSE_NORMAL_CHOLESKY;
 
   problem_ = new ceres::Problem();
+}
+
+void CeresSolver::setVerbose(bool verbose)
+{
+  verbose_ = verbose;
 }
 
 bool CeresSolver::optimize(const std::vector<ConstraintPtr> & odom_constraints,
@@ -80,6 +87,11 @@ bool CeresSolver::optimize(const std::vector<ConstraintPtr> & odom_constraints,
     return false;
   }
 
+  if (verbose_)
+  {
+    std::cout << summary.FullReport() << std::endl;
+  }
+
   // Update corrected poses
   for (auto & scan : scans)
   {
@@ -101,6 +113,10 @@ ceres::ResidualBlockId CeresSolver::addConstraint(const ConstraintPtr & constrai
   ScanPtr & begin = scans[constraint->begin];
   ScanPtr & end = scans[constraint->end];
 
+  // These are our internal copies of just the node pose
+  auto begin_node = nodes_.find(begin->id);
+  auto end_node = nodes_.find(end->id);
+
   const Eigen::Matrix3d sqrt_information = constraint->information.llt().matrixL();
 
   ceres::CostFunction * cost_function =
@@ -109,14 +125,33 @@ ceres::ResidualBlockId CeresSolver::addConstraint(const ConstraintPtr & constrai
                                  constraint->transform(2),
                                  sqrt_information);
 
+  if (verbose_)
+  {
+    double ** param = new double*[6];
+    param[0] = &(begin_node->second(0));
+    param[1] = &(begin_node->second(1));
+    param[2] = &(begin_node->second(2));
+    param[3] = &(end_node->second(0));
+    param[4] = &(end_node->second(1));
+    param[5] = &(end_node->second(2));
+    double * residual = new double[3];
+    cost_function->Evaluate(param, residual, NULL);
+    std::cout << "Residuals for constraint between " << begin->id
+              << " and " << end->id << std::endl;
+    std::cout << "  " << residual[0] << ", " << residual[1] << ", "
+              << residual[2] << std::endl;
+    delete[] param;
+    delete[] residual;
+  }
+
   return problem_->AddResidualBlock(cost_function,
                                     NULL,  // squared loss
-                                    &(begin->pose.x),
-                                    &(begin->pose.y),
-                                    &(begin->pose.theta),
-                                    &(end->pose.x),
-                                    &(end->pose.y),
-                                    &(end->pose.theta));
+                                    &(begin_node->second(0)),
+                                    &(begin_node->second(1)),
+                                    &(begin_node->second(2)),
+                                    &(end_node->second(0)),
+                                    &(end_node->second(1)),
+                                    &(end_node->second(2)));
 }
 
 }  // namespace ndt_2d

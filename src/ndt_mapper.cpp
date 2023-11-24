@@ -159,9 +159,6 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->pose.x += correction.x;
     scan->pose.y += correction.y;
     scan->pose.theta += correction.theta;
-
-    // Global consistency - search scans for global matches
-    searchGlobalMatches(scan);
   }
 
   RCLCPP_INFO(logger_, "Corrected: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
@@ -174,17 +171,30 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       ConstraintPtr constraint = std::make_shared<Constraint>();
       constraint->begin = graph_.scans.size() - 1;
       constraint->end = scan->id;
-      constraint->transform(0) = scan->pose.x - graph_.scans.back()->pose.x;
-      constraint->transform(0) = scan->pose.y - graph_.scans.back()->pose.y;
-      constraint->transform(0) = scan->pose.theta - graph_.scans.back()->pose.theta;
-      // TODO(fergs): add information matrix
+      // Get the delta in map coordinates
+      double dx = scan->pose.x - graph_.scans.back()->pose.x;
+      double dy = scan->pose.y - graph_.scans.back()->pose.y;
+      // Convert dx/dy into the coordinate frame of begin->pose
+      double costh = cos(graph_.scans.back()->pose.theta);
+      double sinth = sin(graph_.scans.back()->pose.theta);
+      constraint->transform(0) = costh * dx + sinth * dy;
+      constraint->transform(1) = -sinth * dx + costh * dy;
+      constraint->transform(2) = scan->pose.theta - graph_.scans.back()->pose.theta;
+      // TODO(fergs): add proper information matrix
+      constraint->information(0, 0) = 100.0;
+      constraint->information(1, 1) = 100.0;
+      constraint->information(2, 2) = 20.0;
       graph_.odom_constraints.push_back(constraint);
     }
+
     // Append new scan to our graph
     graph_.scans.push_back(scan);
     prev_odom_pose_ = odom_pose;
     map_update_available_ = true;
   }
+
+  // Global consistency - search scans for global matches
+  searchGlobalMatches(scan);
 }
 
 void Mapper::buildNDT(const std::vector<ScanPtr>::const_iterator& begin,
@@ -308,14 +318,28 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 
     if (score < uncorrected_score)
     {
+      // Correct pose
+      scan->pose.x += correction.x;
+      scan->pose.y += correction.y;
+      scan->pose.theta += correction.theta;
+
       // Add constraint to the graph
       ConstraintPtr constraint = std::make_shared<Constraint>();
-      constraint->begin = scan->id;
-      constraint->end = (*candidate)->id;
-      constraint->transform(0) = (*candidate)->pose.x - scan->pose.x;
-      constraint->transform(0) = (*candidate)->pose.y - scan->pose.y;
-      constraint->transform(0) = (*candidate)->pose.theta - scan->pose.theta;
-      // TODO(fergs): add information matrix
+      constraint->begin = (*candidate)->id;
+      constraint->end = scan->id;
+      // Get the delta in map coordinates
+      double dx = scan->pose.x - (*candidate)->pose.x;
+      double dy = scan->pose.y - (*candidate)->pose.y;
+      // Convert dx/dy into the coordinate frame of begin->pose
+      double costh = cos((*candidate)->pose.theta);
+      double sinth = sin((*candidate)->pose.theta);
+      constraint->transform(0) = costh * dx + sinth * dy;
+      constraint->transform(1) = -sinth * dx + costh * dy;
+      constraint->transform(2) = scan->pose.theta - (*candidate)->pose.theta;
+      // TODO(fergs): add proper information matrix
+      constraint->information(0, 0) = 100.0;
+      constraint->information(1, 1) = 100.0;
+      constraint->information(2, 2) = 20.0;
       graph_.loop_constraints.push_back(constraint);
       // TODO(fergs): only run this occasionally?
       solver_->optimize(graph_.odom_constraints, graph_.loop_constraints, graph_.scans);
@@ -373,6 +397,7 @@ void Mapper::mapPublishCallback()
   nav_msgs::msg::OccupancyGrid grid_msg;
   grid_msg.header.frame_id = "map";
   grid_msg.header.stamp = this->now();
+  grid_msg.info.map_load_time = this->now();
   grid_->getMsg(graph_.scans, grid_msg);
   map_pub_->publish(grid_msg);
 

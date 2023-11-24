@@ -20,6 +20,9 @@ class CeresSolver
 public:
   CeresSolver();
 
+  /** @brief Turn on/off very verbose outputs. */
+  void setVerbose(bool verbose);
+
   /**
    * @brief Optimize the graph.
    * @param odom_constraints Additional constraint edges.
@@ -44,6 +47,8 @@ private:
   // To incrementally build, track number of constraints
   size_t num_odom_constraints_;
   size_t num_loop_constraints_;
+
+  bool verbose_;
 };
 
 }  // namespace ndt_2d
