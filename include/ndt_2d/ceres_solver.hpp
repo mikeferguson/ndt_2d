@@ -38,7 +38,7 @@ private:
   ceres::Solver::Options options_;
 
   // Duplicate each node/scan pose so that failed optimizations don't break our map
-  // Using an unordered map rather than vector so that pointer to Vector3d are not invalidated 
+  // Using an unordered map rather than vector so that pointer to Vector3d are not invalidated
   std::unordered_map<int, Eigen::Vector3d> nodes_;
 
   // To incrementally build, track number of constraints

@@ -24,11 +24,11 @@ TEST(NdtModelTests, test_ndt_cell)
   // Update NDT
   cell.compute();
 
-  EXPECT_EQ(3.5, cell.mean(0));
-  EXPECT_EQ(3.5, cell.mean(1));
-  EXPECT_NEAR(0.005, cell.covariance(0, 0), 0.0001);
-  EXPECT_NEAR(0.0025, cell.covariance(0, 1), 0.0001);
-  EXPECT_NEAR(0.00125, cell.covariance(1, 1), 0.0001);
+  EXPECT_DOUBLE_EQ(3.5, cell.mean(0));
+  EXPECT_DOUBLE_EQ(3.5, cell.mean(1));
+  EXPECT_NEAR(12.255, cell.covariance(0, 0), 0.0001);
+  EXPECT_NEAR(0.0, cell.covariance(0, 1), 0.0001);
+  EXPECT_NEAR(12.25125, cell.covariance(1, 1), 0.0001);
 
   p.x = 3.5;
   p.y = 3.5;
@@ -36,11 +36,11 @@ TEST(NdtModelTests, test_ndt_cell)
 
   p.x = 3.49;
   p.y = 3.49;
-  EXPECT_NEAR(0.882497, cell.score(p), 0.001);
+  EXPECT_NEAR(1.0, cell.score(p), 0.001);
 
   p.x = 3.51;
   p.y = 3.49;
-  EXPECT_NEAR(0.324652, cell.score(p), 0.001);
+  EXPECT_NEAR(1.0, cell.score(p), 0.001);
 
   p.x = 3.4;
   p.y = 3.45;
@@ -48,7 +48,11 @@ TEST(NdtModelTests, test_ndt_cell)
 
   p.x = 3.1;
   p.y = 3.2;
-  EXPECT_NEAR(0.0, cell.score(p), 0.001);
+  EXPECT_NEAR(0.9834, cell.score(p), 0.001);
+
+  p.x = 0.0;
+  p.y = 0.0;
+  EXPECT_NEAR(0.1889, cell.score(p), 0.001);
 }
 
 TEST(NdtModelTests, test_ndt)
