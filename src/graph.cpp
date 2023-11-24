@@ -145,4 +145,79 @@ bool Graph::save(const std::string & filename)
   return true;
 }
 
+void Graph::getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp::Time & t)
+{
+  msg = std::make_shared<visualization_msgs::msg::MarkerArray>();
+
+  // Publish nodes in red
+  visualization_msgs::msg::Marker m;
+  m.header.frame_id = "map";
+  m.header.stamp = t;
+  m.ns = "nodes";
+  m.type = visualization_msgs::msg::Marker::SPHERE;
+  m.action = visualization_msgs::msg::Marker::ADD;
+  m.scale.x = 0.1;
+  m.scale.y = 0.1;
+  m.scale.z = 0.1;
+  m.color.r = 1.0;
+  m.color.g = 0.0;
+  m.color.b = 0.0;
+  m.color.a = 1.0;
+
+  for (auto & scan : scans)
+  {
+    // Publish
+    m.id = scan->id;
+    m.pose.position.x = scan->pose.x;
+    m.pose.position.y = scan->pose.y;
+    msg->markers.push_back(m);
+  }
+
+  // Publish odometry edges in blue
+  m.header.frame_id = "map";
+  m.header.stamp = t;
+  m.ns = "edges";
+  m.id = 0;
+  m.type = visualization_msgs::msg::Marker::LINE_STRIP;
+  m.action = visualization_msgs::msg::Marker::ADD;
+  m.scale.x = 0.1;
+  m.scale.y = 0.1;
+  m.scale.z = 0.1;
+  m.color.r = 0.0;
+  m.color.g = 0.0;
+  m.color.b = 1.0;
+  m.color.a = 1.0;
+
+  for (auto & constraint : odom_constraints)
+  {
+    auto & begin = scans[constraint->begin];
+    auto & end = scans[constraint->end];
+    m.points.resize(2);
+    m.points[0].x = begin->pose.x;
+    m.points[0].y = begin->pose.y;
+    m.points[1].x = end->pose.x;
+    m.points[1].y = end->pose.y;
+    msg->markers.push_back(m);
+    ++m.id;
+  }
+
+  // Publish loop edges in green
+  m.color.r = 0.0;
+  m.color.g = 1.0;
+  m.color.b = 0.0;
+
+  for (auto & constraint : loop_constraints)
+  {
+    auto & begin = scans[constraint->begin];
+    auto & end = scans[constraint->end];
+    m.points.resize(2);
+    m.points[0].x = begin->pose.x;
+    m.points[0].y = begin->pose.y;
+    m.points[1].x = end->pose.x;
+    m.points[1].y = end->pose.y;
+    msg->markers.push_back(m);
+    ++m.id;
+  }
+}
+
 }  // namespace ndt_2d

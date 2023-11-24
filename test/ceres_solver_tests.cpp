@@ -14,7 +14,6 @@ TEST(CeresSolverTests, information_matrix_tests)
   covariance(2, 2) = 0.005;
 
   Eigen::Matrix3d info = covariance.inverse();
-  std::cout << info << std::endl;
 
   EXPECT_DOUBLE_EQ(1000, info(0, 0));
   EXPECT_DOUBLE_EQ(1000, info(1, 1));

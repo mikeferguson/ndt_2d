@@ -9,6 +9,8 @@
 #include <vector>
 #include <string>
 #include <ndt_2d/ndt_model.hpp>
+#include <rclcpp/rclcpp.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 namespace ndt_2d
 {
@@ -31,6 +33,11 @@ public:
    * @brief Save all scans and constraints to a file
    */
   bool save(const std::string & filename);
+
+  /**
+   * @brief Get a visualization msg for the graph
+   */
+  void getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp::Time & t);
 
   // Vector of scans used to build the map
   std::vector<ScanPtr> scans;
