@@ -30,6 +30,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   minimum_travel_rotation_ = this->declare_parameter<double>("minimum_travel_rotation", 1.0);
   rolling_depth_ = this->declare_parameter<int>("rolling_depth", 10);
   odom_frame_ = this->declare_parameter<std::string>("odom_frame", "odom");
+  laser_max_beams_ = this->declare_parameter<int>("laser_max_beams", 100);
   search_angular_resolution_ = this->declare_parameter<double>("search_angular_resolution", 0.0025);
   search_angular_size_ = this->declare_parameter<double>("search_angular_size", 0.1);
   search_linear_resolution_ = this->declare_parameter<double>("search_linear_resolution", 0.005);
@@ -152,7 +153,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     // Local consistency - match new scan against last 10 scans
     Pose2d correction;
     double uncorrected_score = ndt->likelihood(scan);
-    matchScan(ndt, scan, correction);
+    matchScan(ndt, scan, correction, laser_max_beams_);
     double score = ndt->likelihood(scan, correction);
     RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
                 correction.x, correction.y, correction.theta, uncorrected_score, score);
@@ -227,15 +228,20 @@ void Mapper::buildNDT(const std::vector<ScanPtr>::const_iterator& begin,
 }
 
 double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
-                         const ScanPtr & scan, Pose2d & pose)
+                         const ScanPtr & scan, Pose2d & pose,
+                         size_t scan_points_to_use)
 {
   // Search NDT for best correlation for new scan
   double best_score = 0;
 
+  // Subsample the scan
+  scan_points_to_use = std::min(scan_points_to_use, scan->points.size());
+  double scan_step = static_cast<double>(scan->points.size()) / scan_points_to_use;
+
   std::vector<Point> points_outer;
   std::vector<Point> points_inner;
-  points_outer.resize(scan->points.size());
-  points_inner.resize(scan->points.size());
+  points_outer.resize(scan_points_to_use);
+  points_inner.resize(scan_points_to_use);
 
   for (double dth = -search_angular_size_;
        dth < search_angular_size_;
@@ -246,8 +252,11 @@ double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
     double sinth = sin(scan->pose.theta + dth);
     for (size_t i = 0; i < points_outer.size(); ++i)
     {
-      points_outer[i].x = scan->points[i].x * costh - scan->points[i].y * sinth + scan->pose.x;
-      points_outer[i].y = scan->points[i].x * sinth + scan->points[i].y * costh + scan->pose.y;
+      size_t scan_idx = static_cast<size_t>(i * scan_step);
+      points_outer[i].x = scan->points[scan_idx].x * costh -
+                          scan->points[scan_idx].y * sinth + scan->pose.x;
+      points_outer[i].y = scan->points[scan_idx].x * sinth +
+                          scan->points[scan_idx].y * costh + scan->pose.y;
     }
 
     for (double dx = -search_linear_size_;
@@ -313,7 +322,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 
     // Try to match scans
     Pose2d correction;
-    matchScan(ndt, scan, correction);
+    matchScan(ndt, scan, correction, laser_max_beams_);
     double score = -ndt->likelihood(scan, correction);
 
     if (score < uncorrected_score)

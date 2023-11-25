@@ -47,11 +47,12 @@ protected:
    * @param ndt Map to match scan against.
    * @param scan Scan to match against NDT map.
    * @param pose The corrected pose that best matches scan to NDT map.
+   * @param scan_points_to_use Number of points to match from the scan.
    * @returns The likelihood score when scan is at corrected pose.
    */
   double matchScan(const std::shared_ptr<NDT> & ndt,
-                   const ScanPtr & scan,
-                   Pose2d & pose);
+                   const ScanPtr & scan, Pose2d & pose,
+                   size_t scan_points_to_use);
 
   void searchGlobalMatches(ScanPtr & scan);
   void publishTransform();
@@ -64,6 +65,7 @@ protected:
   double minimum_travel_distance_, minimum_travel_rotation_;
   size_t rolling_depth_;
   std::string odom_frame_;
+  size_t laser_max_beams_;
   double search_angular_resolution_, search_angular_size_;
   double search_linear_resolution_, search_linear_size_;
   double global_search_size_;
