@@ -49,7 +49,8 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
 
   grid_ = std::make_shared<OccupancyGrid>(map_resolution_);
 
-  map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map", 1);
+  map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map",
+    rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
   laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
     "scan", 1, std::bind(&Mapper::laserCallback, this, std::placeholders::_1));
 
