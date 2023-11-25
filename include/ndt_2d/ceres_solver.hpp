@@ -9,6 +9,7 @@
 #include <Eigen/Core>
 #include <ceres/ceres.h>
 #include <unordered_map>
+#include <memory>
 #include <vector>
 #include <ndt_2d/ndt_model.hpp>
 
@@ -24,7 +25,18 @@ public:
   void setVerbose(bool verbose);
 
   /**
-   * @brief Optimize the graph.
+   * @brief Match a scan against an NDT map.
+   * @param ndt Map to match scan against.
+   * @param scan Scan to match against NDT map.
+   * @param pose The corrected pose that best matches scan to NDT map.
+   * @returns True if scan matcher succeeded.
+   */
+  bool matchScan(const std::shared_ptr<NDT> & ndt,
+                 const ScanPtr & scan,
+                 Pose2d & pose);
+
+  /**
+   * @brief Optimize a global graph.
    * @param odom_constraints Additional constraint edges.
    * @param 
    */
@@ -36,7 +48,7 @@ private:
   ceres::ResidualBlockId addConstraint(const ConstraintPtr & constraint,
                                        std::vector<ScanPtr> & scans);
 
-  // Incrementally build the problem to avoid large initialization time
+  // Incrementally build the graph problem to avoid large initialization time
   ceres::Problem * problem_;
   ceres::Solver::Options options_;
 

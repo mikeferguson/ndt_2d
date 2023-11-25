@@ -294,7 +294,10 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   {
     Pose2d correction;
     double uncorrected_score = global_ndt_->likelihood(scan);
-    matchScan(global_ndt_, scan, correction, laser_max_beams_);
+    if (!solver_->matchScan(global_ndt_, scan, correction))
+    {
+      RCLCPP_WARN(logger_, "Scan matching failed");
+    }
     double score = global_ndt_->likelihood(scan, correction);
     RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
                 correction.x, correction.y, correction.theta, uncorrected_score, score);
@@ -325,7 +328,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       // Local consistency - match new scan against last 10 scans
       Pose2d correction;
       double uncorrected_score = ndt->likelihood(scan);
-      matchScan(ndt, scan, correction, laser_max_beams_);
+      solver_->matchScan(ndt, scan, correction);
       double score = ndt->likelihood(scan, correction);
       RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
                   correction.x, correction.y, correction.theta, uncorrected_score, score);

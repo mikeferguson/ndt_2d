@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <ndt_2d/ceres_solver.hpp>
+#include <ndt_2d/ceres_solver_ndt.hpp>
 #include <ndt_2d/ceres_solver_pose.hpp>
 
 namespace ndt_2d
@@ -23,6 +24,60 @@ CeresSolver::CeresSolver()
 void CeresSolver::setVerbose(bool verbose)
 {
   verbose_ = verbose;
+}
+
+bool CeresSolver::matchScan(const std::shared_ptr<NDT> & ndt,
+                            const ScanPtr & scan,
+                            Pose2d & pose)
+{
+  ceres::Problem problem;
+  double estimate[3] = {scan->pose.x, scan->pose.y, scan->pose.theta};
+
+  ceres::Solver::Options options;
+  options.max_num_iterations = 100;
+  options.linear_solver_type = ceres::DENSE_QR;
+  options.use_nonmonotonic_steps = true;
+  options.function_tolerance = 1e-8;
+
+  ceres::CostFunction * ndt_cost_function =
+    CostFunctionNDT::Create(ndt, scan);
+
+  problem.AddResidualBlock(ndt_cost_function,
+                           NULL,  // squared loss
+                           estimate);
+
+  if (verbose_)
+  {
+    double ** params = new double*[1];
+    params[0] = estimate;
+    double * residual = new double[scan->points.size()];
+    ndt_cost_function->Evaluate(params, residual, NULL);
+    for (size_t i = 0; i < scan->points.size(); ++i)
+    {
+      std::cout << residual[i] << ", ";
+    }
+    std::cout << std::endl;
+    delete[] residual;
+  }
+
+  // Run the solver
+  ceres::Solver::Summary summary;
+  ceres::Solve(options, &problem, &summary);
+
+  if (true || !summary.IsSolutionUsable())
+  {
+    std::cout << summary.FullReport() << std::endl;
+  }
+
+  if (!summary.IsSolutionUsable())
+  {
+    return false;
+  }
+
+  pose.x = estimate[0] - scan->pose.x;
+  pose.y = estimate[1] - scan->pose.y;
+  pose.theta = estimate[2] - scan->pose.theta;
+  return true;
 }
 
 bool CeresSolver::optimize(const std::vector<ConstraintPtr> & odom_constraints,
@@ -82,14 +137,14 @@ bool CeresSolver::optimize(const std::vector<ConstraintPtr> & odom_constraints,
   ceres::Solver::Summary summary;
   ceres::Solve(options_, problem_, &summary);
 
+  if (verbose_ || !summary.IsSolutionUsable())
+  {
+    std::cout << summary.FullReport() << std::endl;
+  }
+
   if (!summary.IsSolutionUsable())
   {
     return false;
-  }
-
-  if (verbose_)
-  {
-    std::cout << summary.FullReport() << std::endl;
   }
 
   // Update corrected poses
