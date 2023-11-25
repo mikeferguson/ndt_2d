@@ -151,9 +151,11 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
     // Local consistency - match new scan against last 10 scans
     Pose2d correction;
-    double score = matchScan(ndt, scan, correction);
-    RCLCPP_INFO(logger_, "           %f, %f, %f (%f)",
-                correction.x, correction.y, correction.theta, score);
+    double uncorrected_score = ndt->likelihood(scan);
+    matchScan(ndt, scan, correction);
+    double score = ndt->likelihood(scan, correction);
+    RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
+                correction.x, correction.y, correction.theta, uncorrected_score, score);
 
     // Add correction to scan corrected pose
     scan->pose.x += correction.x;
@@ -311,13 +313,14 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 
     // Try to match scans
     Pose2d correction;
-    double score = matchScan(ndt, scan, correction);
-    std::cout << "Comparing " << (*candidate)->id << " against "
-              << scan->id << " for loop closure" << std::endl;
-    std::cout << "  Global match score: " << score << " vs " << uncorrected_score << std::endl;
+    matchScan(ndt, scan, correction);
+    double score = -ndt->likelihood(scan, correction);
 
     if (score < uncorrected_score)
     {
+      std::cout << "Adding loop closure: " << (*candidate)->id << " to " << scan->id << std::endl;
+      std::cout << "  Improves score from " << uncorrected_score << " to " << score << std::endl;
+
       // Correct pose
       scan->pose.x += correction.x;
       scan->pose.y += correction.y;

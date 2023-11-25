@@ -133,13 +133,6 @@ public:
   double likelihood(const std::vector<Point>& points);
 
   /**
-   * @brief Query the NDT. Typically used to create occupancy grid.
-   * @param points The vector of points to score.
-   * @param scores The score for each point.
-   */
-  void likelihood(const std::vector<Point>& points, std::vector<double>& scores);
-
-  /**
    * @brief Query the NDT.
    * @param point The point to score.
    * @returns The probability of the point.
@@ -152,6 +145,14 @@ public:
    * @returns The probability of the scan.
    */
   double likelihood(const ScanPtr& scan);
+
+  /**
+   * @brief Query the NDT.
+   * @param scan The scan to score. Note that pose WILL be used.
+   * @param correction Pose correction to add to scan pose.
+   * @returns The probability of the scan.
+   */
+  double likelihood(const ScanPtr& scan, const Pose2d& correction);
 
 private:
   /**

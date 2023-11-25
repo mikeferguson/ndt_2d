@@ -138,16 +138,6 @@ double NDT::likelihood(const std::vector<Point>& points)
   return score;
 }
 
-void NDT::likelihood(const std::vector<Point>& points, std::vector<double>& scores)
-{
-  scores.clear();
-  scores.reserve(points.size());
-  for (auto & point : points)
-  {
-    scores.push_back(likelihood(point));
-  }
-}
-
 double NDT::likelihood(const Point& point)
 {
   int index = getIndex(point.x, point.y);
@@ -160,10 +150,29 @@ double NDT::likelihood(const Point& point)
 
 double NDT::likelihood(const ScanPtr& scan)
 {
+  Pose2d pose;
+  return likelihood(scan, pose);
+}
+
+double NDT::likelihood(const ScanPtr& scan, const Pose2d& correction)
+{
+  Eigen::Isometry3d transform_p(Eigen::Translation3d(scan->pose.x, scan->pose.y, 0.0) *
+                                Eigen::AngleAxisd(scan->pose.theta, Eigen::Vector3d::UnitZ()));
+
+  Eigen::Isometry3d transform_c(Eigen::Translation3d(correction.x, correction.y, 0.0) *
+                                Eigen::AngleAxisd(correction.theta, Eigen::Vector3d::UnitZ()));
+
+  Eigen::Isometry3d transform = transform_p * transform_c;
+
   double score = 0.0;
   for (auto & point : scan->points)
   {
-    Point p(point.x + scan->pose.x, point.y + scan->pose.y);
+    // Transform point
+    Eigen::Vector3d point_t(point.x, point.y, 1.0);
+    point_t = transform * point_t;
+
+    // Now score
+    Point p(point_t(0), point_t(1));
     score += likelihood(p);
   }
   return score;
