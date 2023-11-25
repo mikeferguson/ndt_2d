@@ -68,9 +68,9 @@ void Cell::compute()
 
 double Cell::score(const Point & point)
 {
-  if (n < 3)
+  if (n < 5)
   {
-    // Need at least three points for our mean/cov to be valid
+    // Need at least five points for our mean/cov to be valid
     return 0.0;
   }
 

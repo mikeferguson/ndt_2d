@@ -24,11 +24,29 @@ TEST(NdtModelTests, test_ndt_cell)
   // Update NDT
   cell.compute();
 
+  // Mean should be correct
   EXPECT_DOUBLE_EQ(3.5, cell.mean(0));
   EXPECT_DOUBLE_EQ(3.5, cell.mean(1));
-  EXPECT_NEAR(12.255, cell.covariance(0, 0), 0.0001);
-  EXPECT_NEAR(0.0, cell.covariance(0, 1), 0.0001);
-  EXPECT_NEAR(12.25125, cell.covariance(1, 1), 0.0001);
+
+  // But score will be 0 since we don't have enough points
+  p.x = 3.5;
+  p.y = 3.5;
+  EXPECT_NEAR(0.0, cell.score(p), 0.001);
+
+  // Add a few more points
+  p.x = 3.6;
+  p.y = 3.45;
+  cell.addPoint(p);
+  p.x = 3.4;
+  p.y = 3.55;
+  cell.addPoint(p);
+
+  // Update NDT
+  cell.compute();
+
+  EXPECT_NEAR(12.25666666, cell.covariance(0, 0), 0.001);
+  EXPECT_NEAR(0.0, cell.covariance(0, 1), 0.001);
+  EXPECT_NEAR(12.25125, cell.covariance(1, 1), 0.001);
 
   p.x = 3.5;
   p.y = 3.5;
@@ -52,7 +70,7 @@ TEST(NdtModelTests, test_ndt_cell)
 
   p.x = 0.0;
   p.y = 0.0;
-  EXPECT_NEAR(0.1889, cell.score(p), 0.001);
+  EXPECT_NEAR(0.202, cell.score(p), 0.001);
 }
 
 TEST(NdtModelTests, test_ndt)
@@ -73,6 +91,12 @@ TEST(NdtModelTests, test_ndt)
   p.x = 3.55;
   p.y = 3.6;
   scan->points.push_back(p);
+  p.x = 3.45;
+  p.y = 3.6;
+  scan->points.push_back(p);
+  p.x = 3.45;
+  p.y = 3.6;
+  scan->points.push_back(p);
 
   // Update NDT
   ndt.addScan(scan);
@@ -86,7 +110,7 @@ TEST(NdtModelTests, test_ndt)
 
   // Test scoring
   double score = ndt.likelihood(points);
-  EXPECT_EQ(1.0, score);
+  EXPECT_NEAR(0.99996, score, 0.001);
 }
 
 int main(int argc, char** argv)
