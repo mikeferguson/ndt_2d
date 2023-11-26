@@ -145,10 +145,8 @@ bool Graph::save(const std::string & filename)
   return true;
 }
 
-void Graph::getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp::Time & t)
+void Graph::getMsg(visualization_msgs::msg::MarkerArray & msg, rclcpp::Time & t)
 {
-  msg = std::make_shared<visualization_msgs::msg::MarkerArray>();
-
   // Publish nodes in red
   visualization_msgs::msg::Marker m;
   m.header.frame_id = "map";
@@ -156,9 +154,9 @@ void Graph::getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp
   m.ns = "nodes";
   m.type = visualization_msgs::msg::Marker::SPHERE;
   m.action = visualization_msgs::msg::Marker::ADD;
-  m.scale.x = 0.1;
-  m.scale.y = 0.1;
-  m.scale.z = 0.1;
+  m.scale.x = 0.08;
+  m.scale.y = 0.08;
+  m.scale.z = 0.08;
   m.color.r = 1.0;
   m.color.g = 0.0;
   m.color.b = 0.0;
@@ -170,7 +168,7 @@ void Graph::getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp
     m.id = scan->id;
     m.pose.position.x = scan->pose.x;
     m.pose.position.y = scan->pose.y;
-    msg->markers.push_back(m);
+    msg.markers.push_back(m);
   }
 
   // Publish odometry edges in blue
@@ -180,9 +178,11 @@ void Graph::getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp
   m.id = 0;
   m.type = visualization_msgs::msg::Marker::LINE_STRIP;
   m.action = visualization_msgs::msg::Marker::ADD;
-  m.scale.x = 0.1;
-  m.scale.y = 0.1;
-  m.scale.z = 0.1;
+  m.pose.position.x = 0.0;
+  m.pose.position.y = 0.0;
+  m.scale.x = 0.04;
+  m.scale.y = 0.04;
+  m.scale.z = 0.04;
   m.color.r = 0.0;
   m.color.g = 0.0;
   m.color.b = 1.0;
@@ -197,7 +197,7 @@ void Graph::getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp
     m.points[0].y = begin->pose.y;
     m.points[1].x = end->pose.x;
     m.points[1].y = end->pose.y;
-    msg->markers.push_back(m);
+    msg.markers.push_back(m);
     ++m.id;
   }
 
@@ -215,7 +215,7 @@ void Graph::getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp
     m.points[0].y = begin->pose.y;
     m.points[1].x = end->pose.x;
     m.points[1].y = end->pose.y;
-    msg->markers.push_back(m);
+    msg.markers.push_back(m);
     ++m.id;
   }
 }

@@ -52,6 +52,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
 
   map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map",
     rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
+  graph_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("graph", 1);
   laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
     "scan", 1, std::bind(&Mapper::laserCallback, this, std::placeholders::_1));
 
@@ -407,13 +408,20 @@ void Mapper::mapPublishCallback()
     map_update_available_ = false;
   }
 
+  rclcpp::Time now = this->now();
+
   // Publish an occupancy grid
   nav_msgs::msg::OccupancyGrid grid_msg;
   grid_msg.header.frame_id = "map";
-  grid_msg.header.stamp = this->now();
-  grid_msg.info.map_load_time = this->now();
+  grid_msg.header.stamp = now;
+  grid_msg.info.map_load_time = now;
   grid_->getMsg(graph_.scans, grid_msg);
   map_pub_->publish(grid_msg);
+
+  // Publish the graph
+  visualization_msgs::msg::MarkerArray graph_msg;
+  graph_.getMsg(graph_msg, now);
+  graph_pub_->publish(graph_msg);
 
   // Publish TF
   publishTransform();

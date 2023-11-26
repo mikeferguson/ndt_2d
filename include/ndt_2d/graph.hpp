@@ -37,7 +37,7 @@ public:
   /**
    * @brief Get a visualization msg for the graph
    */
-  void getMsg(visualization_msgs::msg::MarkerArray::SharedPtr & msg, rclcpp::Time & t);
+  void getMsg(visualization_msgs::msg::MarkerArray & msg, rclcpp::Time & t);
 
   // Vector of scans used to build the map
   std::vector<ScanPtr> scans;

@@ -18,6 +18,7 @@
 #include <ndt_2d/graph.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
+#include <visualization_msgs/msg/marker_array.hpp>
 
 namespace ndt_2d
 {
@@ -75,6 +76,7 @@ protected:
   rclcpp::Logger logger_;
   rclcpp::TimerBase::SharedPtr map_publish_timer_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_pub_;
+  rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr graph_pub_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
   std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
