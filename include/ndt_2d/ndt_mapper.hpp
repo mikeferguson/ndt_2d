@@ -17,6 +17,7 @@
 #include <ndt_2d/ceres_solver.hpp>
 #include <ndt_2d/graph.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
+#include <ndt_2d/srv/configure.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
@@ -30,6 +31,10 @@ public:
   virtual ~Mapper();
 
 protected:
+  /** @brief ROS callback for configure service */
+  void configure(const std::shared_ptr<ndt_2d::srv::Configure::Request> request,
+                 std::shared_ptr<ndt_2d::srv::Configure::Response> response);
+
   /** @brief ROS callback for new laser scan */
   void laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg);
 
@@ -78,14 +83,17 @@ protected:
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr graph_pub_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
+  rclcpp::Service<ndt_2d::srv::Configure>::SharedPtr configure_srv_;
   std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf2_broadcaster_;
 
   // Map data
-  Graph graph_;
+  GraphPtr graph_;
+  bool enable_mapping_;
   // The previous odometry pose, corrected gets stored with the ScanPtr
   Pose2d prev_odom_pose_;
+  bool prev_odom_pose_is_initialized_;
 
   // Graph optimization
   std::shared_ptr<CeresSolver> solver_;

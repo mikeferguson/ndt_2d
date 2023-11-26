@@ -6,6 +6,7 @@
 #ifndef NDT_2D__GRAPH_HPP_
 #define NDT_2D__GRAPH_HPP_
 
+#include <memory>
 #include <vector>
 #include <string>
 #include <ndt_2d/ndt_model.hpp>
@@ -46,6 +47,8 @@ public:
   // Loop closure constraints between scans
   std::vector<ConstraintPtr> loop_constraints;
 };
+
+using GraphPtr = std::shared_ptr<Graph>;
 
 }  // namespace ndt_2d
 

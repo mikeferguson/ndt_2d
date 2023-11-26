@@ -1,0 +1,8 @@
+int32 ENABLE_MAPPING=1
+int32 DISABLE_MAPPING=2
+int32 LOAD_FROM_FILE=4
+int32 SAVE_TO_FILE=8
+
+int32 action
+string filename
+---

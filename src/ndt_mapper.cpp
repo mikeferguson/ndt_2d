@@ -22,7 +22,9 @@ namespace ndt_2d
 Mapper::Mapper(const rclcpp::NodeOptions & options)
 : rclcpp::Node("ndt_2d_mapper", options),
   map_update_available_(false),
-  logger_(rclcpp::get_logger("ndt_2d_mapper"))
+  logger_(rclcpp::get_logger("ndt_2d_mapper")),
+  enable_mapping_(true),
+  prev_odom_pose_is_initialized_(true)
 {
   map_resolution_ = this->declare_parameter<double>("resolution", 0.05);
   ndt_resolution_ = this->declare_parameter<double>("ndt_resolution", 0.25);
@@ -50,6 +52,20 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   double occ_thresh = this->declare_parameter<double>("occupancy_threshold", 0.25);
   grid_ = std::make_shared<OccupancyGrid>(map_resolution_, occ_thresh);
 
+  std::string map_file = this->declare_parameter<std::string>("map_file", "");
+  if (map_file.empty())
+  {
+    graph_ = std::make_shared<Graph>();
+  }
+  else
+  {
+    graph_ = std::make_shared<Graph>(map_file);
+    prev_odom_pose_is_initialized_ = false;
+    map_update_available_ = true;
+  }
+  configure_srv_ = this->create_service<ndt_2d::srv::Configure>("configure",
+    std::bind(&Mapper::configure, this, std::placeholders::_1, std::placeholders::_2));
+
   map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map",
     rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
   graph_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("graph", 1);
@@ -64,8 +80,51 @@ Mapper::~Mapper()
 {
 }
 
+void Mapper::configure(const std::shared_ptr<srv::Configure::Request> request,
+                       std::shared_ptr<srv::Configure::Response>)
+{
+  // Enable/disable
+  if (request->action & srv::Configure::Request::ENABLE_MAPPING)
+  {
+    RCLCPP_INFO(logger_, "Enabling mapping");
+    enable_mapping_ = true;
+  }
+  else if (request->action & srv::Configure::Request::DISABLE_MAPPING)
+  {
+    RCLCPP_INFO(logger_, "Disabling mapping");
+    enable_mapping_ = false;
+    // Need to be relocalized before mapping can continue
+    prev_odom_pose_is_initialized_ = false;
+  }
+
+  if (request->action & srv::Configure::Request::LOAD_FROM_FILE)
+  {
+    RCLCPP_INFO(logger_, "Loading map from %s", request->filename.c_str());
+    graph_ = std::make_shared<Graph>(request->filename);
+    map_update_available_ = true;
+    prev_odom_pose_is_initialized_ = false;
+  }
+  else if (request->action & srv::Configure::Request::SAVE_TO_FILE)
+  {
+    RCLCPP_INFO(logger_, "Saving map to %s", request->filename.c_str());
+    graph_->save(request->filename);
+  }
+}
+
 void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg)
 {
+  if (!enable_mapping_)
+  {
+    return;
+  }
+
+  // If we have loaded a previous map, need to localize first
+  if (!prev_odom_pose_is_initialized_)
+  {
+    RCLCPP_WARN(logger_, "Can not build map, not localized within existing map");
+    return;
+  }
+
   // Make sure that we have valid max_range
   if (range_max_ < 0)
   {
@@ -89,7 +148,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
   // Need to convert the scan into an ndt_2d style
   ScanPtr scan(new Scan());
-  scan->id = graph_.scans.size();
+  scan->id = graph_->scans.size();
 
   // Convert pose to ndt_2d style
   Pose2d odom_pose;
@@ -98,7 +157,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   odom_pose.theta = tf2::getYaw(odom_pose_tf.pose.orientation);
 
   // Make sure we have traveled far enough
-  if (!graph_.scans.empty())
+  if (!graph_->scans.empty())
   {
     // Calculate delta in odometry frame
     double dx = odom_pose.x - prev_odom_pose_.x;
@@ -112,11 +171,11 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     }
     // Odometry and corrected frame may not be aligned - determine heading between them
     double heading = angles::shortest_angular_distance(prev_odom_pose_.theta,
-                                                       graph_.scans.back()->pose.theta);
+                                                       graph_->scans.back()->pose.theta);
     // Now apply odometry delta, corrected by heading, to get initial corrected pose
-    scan->pose.x = graph_.scans.back()->pose.x + (dx * cos(heading)) - (dy * sin(heading));
-    scan->pose.y = graph_.scans.back()->pose.y + (dx * sin(heading)) + (dy * cos(heading));
-    scan->pose.theta = angles::normalize_angle(graph_.scans.back()->pose.theta + dth);
+    scan->pose.x = graph_->scans.back()->pose.x + (dx * cos(heading)) - (dy * sin(heading));
+    scan->pose.y = graph_->scans.back()->pose.y + (dx * sin(heading)) + (dy * cos(heading));
+    scan->pose.theta = angles::normalize_angle(graph_->scans.back()->pose.theta + dth);
   }
   else
   {
@@ -143,15 +202,15 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
   RCLCPP_INFO(logger_, "Odom pose: %f, %f, %f", odom_pose.x, odom_pose.y, odom_pose.theta);
 
-  if (!graph_.scans.empty())
+  if (!graph_->scans.empty())
   {
     // Determine rolling window
-    size_t rolling_start = (graph_.scans.size() <= rolling_depth_) ? 0 : graph_.scans.size() - 10;
-    auto rolling = graph_.scans.begin() + rolling_start;
+    size_t rolling_start = (graph_->scans.size() <= rolling_depth_) ? 0 : graph_->scans.size() - 10;
+    auto rolling = graph_->scans.begin() + rolling_start;
 
     // Build NDT of rolling window scans
     std::shared_ptr<NDT> ndt;
-    buildNDT(rolling, graph_.scans.end(), ndt);
+    buildNDT(rolling, graph_->scans.end(), ndt);
 
     // Local consistency - match new scan against last 10 scans
     Pose2d correction;
@@ -172,29 +231,29 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   // TODO(fergs): lock this when timer is converted to thread
   {
     // Add odom constraint to the graph
-    if (!graph_.scans.empty())
+    if (!graph_->scans.empty())
     {
       ConstraintPtr constraint = std::make_shared<Constraint>();
-      constraint->begin = graph_.scans.size() - 1;
+      constraint->begin = graph_->scans.size() - 1;
       constraint->end = scan->id;
       // Get the delta in map coordinates
-      double dx = scan->pose.x - graph_.scans.back()->pose.x;
-      double dy = scan->pose.y - graph_.scans.back()->pose.y;
+      double dx = scan->pose.x - graph_->scans.back()->pose.x;
+      double dy = scan->pose.y - graph_->scans.back()->pose.y;
       // Convert dx/dy into the coordinate frame of begin->pose
-      double costh = cos(graph_.scans.back()->pose.theta);
-      double sinth = sin(graph_.scans.back()->pose.theta);
+      double costh = cos(graph_->scans.back()->pose.theta);
+      double sinth = sin(graph_->scans.back()->pose.theta);
       constraint->transform(0) = costh * dx + sinth * dy;
       constraint->transform(1) = -sinth * dx + costh * dy;
-      constraint->transform(2) = scan->pose.theta - graph_.scans.back()->pose.theta;
+      constraint->transform(2) = scan->pose.theta - graph_->scans.back()->pose.theta;
       // TODO(fergs): add proper information matrix
       constraint->information(0, 0) = 100.0;
       constraint->information(1, 1) = 100.0;
       constraint->information(2, 2) = 20.0;
-      graph_.odom_constraints.push_back(constraint);
+      graph_->odom_constraints.push_back(constraint);
     }
 
     // Append new scan to our graph
-    graph_.scans.push_back(scan);
+    graph_->scans.push_back(scan);
     prev_odom_pose_ = odom_pose;
     map_update_available_ = true;
   }
@@ -294,11 +353,11 @@ double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
 void Mapper::searchGlobalMatches(ScanPtr & scan)
 {
   // Determine where rolling window starts
-  size_t rolling_start = (graph_.scans.size() <= rolling_depth_) ? 0 : graph_.scans.size() - 10;
-  auto rolling = graph_.scans.begin() + rolling_start;
+  size_t rolling_start = (graph_->scans.size() <= rolling_depth_) ? 0 : graph_->scans.size() - 10;
+  auto rolling = graph_->scans.begin() + rolling_start;
 
   // TODO(fergs): apply a real NN search
-  for (auto candidate = graph_.scans.begin(); candidate != rolling; ++candidate)
+  for (auto candidate = graph_->scans.begin(); candidate != rolling; ++candidate)
   {
     // Compute distance between candidate and scan
     // TODO(fergs): do this with barycentric coordinates
@@ -313,7 +372,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
     }
 
     // Take one additional scan on either side of candidate
-    auto begin = (candidate == graph_.scans.begin()) ? candidate : --candidate;
+    auto begin = (candidate == graph_->scans.begin()) ? candidate : --candidate;
     auto end = (candidate == rolling) ? candidate : ++candidate;
 
     // Build NDT of candidate region
@@ -355,9 +414,9 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
       constraint->information(0, 0) = 100.0;
       constraint->information(1, 1) = 100.0;
       constraint->information(2, 2) = 20.0;
-      graph_.loop_constraints.push_back(constraint);
+      graph_->loop_constraints.push_back(constraint);
       // TODO(fergs): only run this occasionally?
-      solver_->optimize(graph_.odom_constraints, graph_.loop_constraints, graph_.scans);
+      solver_->optimize(graph_->odom_constraints, graph_->loop_constraints, graph_->scans);
     }
   }
 }
@@ -365,7 +424,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 void Mapper::publishTransform()
 {
   // Latest corrected pose gives us map -> robot
-  Pose2d & corrected = graph_.scans.back()->pose;
+  Pose2d & corrected = graph_->scans.back()->pose;
   Eigen::Isometry3d map_to_robot(Eigen::Translation3d(corrected.x, corrected.y, 0.0) *
                                  Eigen::AngleAxisd(corrected.theta, Eigen::Vector3d::UnitZ()));
 
@@ -395,7 +454,7 @@ void Mapper::mapPublishCallback()
 {
   if (!map_update_available_)
   {
-    if (!graph_.scans.empty())
+    if (!graph_->scans.empty())
     {
       publishTransform();
     }
@@ -415,12 +474,12 @@ void Mapper::mapPublishCallback()
   grid_msg.header.frame_id = "map";
   grid_msg.header.stamp = now;
   grid_msg.info.map_load_time = now;
-  grid_->getMsg(graph_.scans, grid_msg);
+  grid_->getMsg(graph_->scans, grid_msg);
   map_pub_->publish(grid_msg);
 
   // Publish the graph
   visualization_msgs::msg::MarkerArray graph_msg;
-  graph_.getMsg(graph_msg, now);
+  graph_->getMsg(graph_msg, now);
   graph_pub_->publish(graph_msg);
 
   // Publish TF
