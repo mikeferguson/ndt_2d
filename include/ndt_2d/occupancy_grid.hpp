@@ -19,8 +19,10 @@ public:
   /**
    * @brief Create an occupancy grid generator.
    * @param resolution The map resolution to export.
+   * @param occ_thresh Occupied threshold.
    */
-  explicit OccupancyGrid(double resolution);
+  explicit OccupancyGrid(const double resolution,
+                         const double occ_thresh);
 
   /**
    * @brief Create an occupancy grid message from a series of scans.
@@ -34,6 +36,7 @@ private:
   void updateBounds(std::vector<ndt_2d::ScanPtr>& scans);
 
   double resolution_;
+  double occ_thresh_;
   // Bounds are recalculated when scan vector increases in size
   double min_x_, max_x_, min_y_, max_y_;
   size_t num_scans_;

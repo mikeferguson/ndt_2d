@@ -10,12 +10,13 @@
 
 namespace ndt_2d
 {
-OccupancyGrid::OccupancyGrid(double resolution)
+OccupancyGrid::OccupancyGrid(const double resolution, const double occ_thresh)
 : resolution_(resolution),
-  min_x_(-1.0),
-  max_x_(1.0),
-  min_y_(-1.0),
-  max_y_(1.0),
+  occ_thresh_(occ_thresh),
+  min_x_(0),
+  max_x_(0),
+  min_y_(0),
+  max_y_(0),
   num_scans_(0)
 {
 }
@@ -39,40 +40,90 @@ void OccupancyGrid::getMsg(std::vector<ndt_2d::ScanPtr> & scans,
   grid.info.origin.position.x = min_x_ - pad;
   grid.info.origin.position.y = min_y_ - pad;
   grid.info.origin.orientation.w = 1.0;
-  // TODO(fergs): initialize to -1 once we do raytracing
-  grid.data.assign(grid.info.width * grid.info.height, 0);
+  grid.data.assign(grid.info.width * grid.info.height, -1);
 
   // Create working arrays
   std::vector<int> hit(grid.data.size(), 0);
+  std::vector<int> empty(grid.data.size(), 0);
 
   // Render scans into grid
   for (auto & scan : scans)
   {
-    double x = scan->pose.x;
-    double y = scan->pose.y;
+    double pose_x = scan->pose.x;
+    double pose_y = scan->pose.y;
     double cos_th = cos(scan->pose.theta);
     double sin_th = sin(scan->pose.theta);
 
+    // Start raytracing each line from the pose
+    const int start_x = (pose_x - grid.info.origin.position.x) / resolution_;
+    const int start_y = (pose_y - grid.info.origin.position.y) / resolution_;
+
     for (auto & point : scan->points)
     {
-      Point p(x, y);
-      p.x += point.x * cos_th - point.y * sin_th;
-      p.y += point.x * sin_th + point.y * cos_th;
+      const double point_x = point.x * cos_th - point.y * sin_th + pose_x;
+      const double point_y = point.x * sin_th + point.y * cos_th + pose_y;
 
-      int idx = (p.x - grid.info.origin.position.x) / resolution_;
-      int idy = (p.y - grid.info.origin.position.y) / resolution_;
-      int index = idx + idy * grid.info.width;
-      // TODO(fergs): raytrace and threshold
-      ++hit[index];
+      const int end_x = (point_x - grid.info.origin.position.x) / resolution_;
+      const int end_y = (point_y - grid.info.origin.position.y) / resolution_;
+
+      // Simplified Bresenham
+      int dx = abs(end_x - start_x);
+      int sx = (start_x < end_x) ? 1 : -1;
+      int dy = -abs(end_y - start_y);
+      int sy = (start_y < end_y) ? 1 : -1;
+      int error = dx + dy;
+
+      int x = start_x;
+      int y = start_y;
+
+      while (true)
+      {
+        int index = x + y * grid.info.width;
+        if (x == end_x && y == end_y)
+        {
+          ++hit[index];
+          break;
+        }
+        ++empty[index];
+        if (2 * error >= dy)
+        {
+          if (x == end_x)
+          {
+            ++hit[index];
+            break;
+          }
+          error = error + dy;
+          x += sx;
+        }
+        if (2 * error <= dx)
+        {
+          if (y == end_y)
+          {
+            ++hit[index];
+            break;
+          }
+          error = error + dx;
+          y += sy;
+        }
+      }
     }
   }
 
   // Finalize the map
   for (size_t i = 0; i < grid.data.size(); ++i)
   {
-    if (hit[i] >= 1)
+    double touches = hit[i] + empty[i];
+    if (touches > 0.5)
     {
-      grid.data[i] = 100;
+      // We have information about this cell
+      if (static_cast<double>(hit[i]) / touches > occ_thresh_)
+      {
+        grid.data[i] = 100;
+      }
+      else
+      {
+        grid.data[i] = 0;
+      }
     }
   }
 }

@@ -47,7 +47,8 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   tf2_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf2_buffer_);
   tf2_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
-  grid_ = std::make_shared<OccupancyGrid>(map_resolution_);
+  double occ_thresh = this->declare_parameter<double>("occupancy_threshold", 0.25);
+  grid_ = std::make_shared<OccupancyGrid>(map_resolution_, occ_thresh);
 
   map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map",
     rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
