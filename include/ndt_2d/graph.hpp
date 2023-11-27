@@ -36,6 +36,11 @@ public:
   bool save(const std::string & filename);
 
   /**
+   * @brief Find the index of the nearest scan to this scan
+   */
+  size_t findNearest(const ScanPtr & scan) const;
+
+  /**
    * @brief Get a visualization msg for the graph
    */
   void getMsg(visualization_msgs::msg::MarkerArray & msg, rclcpp::Time & t);

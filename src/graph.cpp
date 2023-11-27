@@ -145,6 +145,25 @@ bool Graph::save(const std::string & filename)
   return true;
 }
 
+size_t Graph::findNearest(const ScanPtr & scan) const
+{
+  double dist = std::numeric_limits<double>::max();
+  size_t nearest = 0;
+  for (size_t i = 0; i < scans.size(); ++i)
+  {
+    // Compute distance between candidate and scan
+    double dx = scan->pose.x - scans[i]->pose.x;
+    double dy = scan->pose.y - scans[i]->pose.y;
+    double d = (dx * dx) + (dy * dy);
+    if (d < dist)
+    {
+      dist = d;
+      nearest = i;
+    }
+  }
+  return nearest;
+}
+
 void Graph::getMsg(visualization_msgs::msg::MarkerArray & msg, rclcpp::Time & t)
 {
   // Publish nodes in red

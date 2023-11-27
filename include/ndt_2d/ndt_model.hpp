@@ -7,6 +7,7 @@
 #define NDT_2D__NDT_MODEL_HPP_
 
 #include <Eigen/Core>
+#include <Eigen/Eigen>
 #include <memory>
 #include <vector>
 
@@ -52,6 +53,20 @@ struct Pose2d
   // Pose orientation in radians
   double theta;
 };
+
+inline Eigen::Isometry3d toEigen(const Pose2d & p)
+{
+  return Eigen::Isometry3d(Eigen::Translation3d(p.x, p.y, 0.0) *
+                           Eigen::AngleAxisd(p.theta, Eigen::Vector3d::UnitZ()));
+}
+
+inline Pose2d fromEigen(const Eigen::Isometry3d & t)
+{
+  Eigen::Quaterniond q(t.linear());
+  auto euler = q.toRotationMatrix().eulerAngles(0, 1, 2);
+  return Pose2d(t.translation().x(), t.translation().y(),
+                euler(2));
+}
 
 struct Scan
 {

@@ -14,6 +14,7 @@
 #include <ndt_2d/occupancy_grid.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
+#include <tf2_eigen/tf2_eigen.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 namespace ndt_2d
@@ -31,6 +32,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   minimum_travel_distance_ = this->declare_parameter<double>("minimum_travel_distance", 0.1);
   minimum_travel_rotation_ = this->declare_parameter<double>("minimum_travel_rotation", 1.0);
   rolling_depth_ = this->declare_parameter<int>("rolling_depth", 10);
+  robot_frame_ = this->declare_parameter<std::string>("robot_frame", "base_link");
   odom_frame_ = this->declare_parameter<std::string>("odom_frame", "odom");
   laser_max_beams_ = this->declare_parameter<int>("laser_max_beams", 100);
   search_angular_resolution_ = this->declare_parameter<double>("search_angular_resolution", 0.0025);
@@ -38,6 +40,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   search_linear_resolution_ = this->declare_parameter<double>("search_linear_resolution", 0.005);
   search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
   global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
+  use_particle_filter_ = this->declare_parameter<bool>("use_particle_filter", false);
 
   // TODO(fergs): Load ROS params for solver
   solver_ = std::make_shared<CeresSolver>();
@@ -66,11 +69,19 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   configure_srv_ = this->create_service<ndt_2d::srv::Configure>("configure",
     std::bind(&Mapper::configure, this, std::placeholders::_1, std::placeholders::_2));
 
-  map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>("map",
-    rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
-  graph_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("graph", 1);
+  map_pub_ = this->create_publisher<nav_msgs::msg::OccupancyGrid>(
+    "map", rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable());
+
+  graph_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
+    "graph", rclcpp::SystemDefaultsQoS());
+
+  pose_sub_ = this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+    "initialpose", rclcpp::SystemDefaultsQoS(),
+    std::bind(&Mapper::poseCallback, this, std::placeholders::_1));
+
   laser_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
-    "scan", 1, std::bind(&Mapper::laserCallback, this, std::placeholders::_1));
+    "scan", rclcpp::SystemDefaultsQoS(),
+    std::bind(&Mapper::laserCallback, this, std::placeholders::_1));
 
   map_publish_timer_ = this->create_wall_timer(std::chrono::milliseconds(250),
     std::bind(&Mapper::mapPublishCallback, this));
@@ -111,9 +122,96 @@ void Mapper::configure(const std::shared_ptr<srv::Configure::Request> request,
   }
 }
 
+void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr& msg)
+{
+  if (!use_particle_filter_ && prev_odom_pose_is_initialized_)
+  {
+    RCLCPP_WARN(logger_, "Ignoring initial pose, already mapping");
+    return;
+  }
+
+  if (msg->header.frame_id != "map")
+  {
+    RCLCPP_ERROR(logger_, "Cannot set initial pose in frames other than map");
+    return;
+  }
+
+  // Find transform from odom to robot frames
+  Eigen::Isometry3d odom_to_robot;
+  try
+  {
+    odom_to_robot = tf2::transformToEigen(
+        tf2_buffer_->lookupTransform(odom_frame_, robot_frame_, tf2::TimePointZero));
+  }
+  catch (const tf2::TransformException& ex)
+  {
+    RCLCPP_ERROR(logger_, "Could not transform %s to %s frame.",
+                 odom_frame_.c_str(), robot_frame_.c_str());
+    return;
+  }
+
+  // Compute transform from odom to laser
+  Eigen::Isometry3d odom_to_laser = odom_to_robot * laser_transform_;
+
+  // Compute transform from map to laser
+  Eigen::Isometry3d map_to_robot;
+  tf2::fromMsg(msg->pose.pose, map_to_robot);
+  Eigen::Isometry3d map_to_laser = map_to_robot * laser_transform_.inverse();
+
+  // If mapping, connect this pose to the graph
+  if (!use_particle_filter_)
+  {
+    ScanPtr scan(new Scan());
+    scan->id = graph_->scans.size();
+    scan->pose.x = msg->pose.pose.position.x;
+    scan->pose.y = msg->pose.pose.position.y;
+    scan->pose.theta = tf2::getYaw(msg->pose.pose.orientation);
+
+    // Find the closest node in existing graph, then add scan to graph
+    size_t nearest = graph_->findNearest(scan);
+    graph_->scans.push_back(scan);
+
+    // Add a constraint
+    ConstraintPtr constraint = makeConstraint(graph_->scans[nearest], scan);
+    graph_->loop_constraints.push_back(constraint);
+  }
+
+  // Localize laser frame
+  prev_robot_pose_ = fromEigen(map_to_laser);
+  prev_odom_pose_ = fromEigen(odom_to_laser);
+  prev_odom_pose_is_initialized_ = true;
+
+  RCLCPP_INFO(logger_, "Localized to %f, %f, %f", msg->pose.pose.position.x,
+              msg->pose.pose.position.x, tf2::getYaw(msg->pose.pose.orientation));
+}
+
 void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg)
 {
-  if (!enable_mapping_)
+  // Save data from laser scan message
+  if (range_max_ < 0) range_max_ = msg->range_max;
+  if (laser_frame_ == "")
+  {
+    try
+    {
+      // Determine pose of laser relative to base
+      laser_transform_ = tf2::transformToEigen(
+        tf2_buffer_->lookupTransform(robot_frame_, msg->header.frame_id, tf2::TimePointZero));
+    }
+    catch (const tf2::TransformException& ex)
+    {
+      RCLCPP_ERROR(logger_, "Could not transform %s to %s frame.",
+                   robot_frame_.c_str(), msg->header.frame_id.c_str());
+    }
+    laser_frame_ = msg->header.frame_id;
+
+    // range_max_ must be set before building the global_ndt_
+    if (use_particle_filter_)
+    {
+      buildNDT(graph_->scans.begin(), graph_->scans.end(), global_ndt_);
+    }
+  }
+
+  if (!enable_mapping_ && !use_particle_filter_)
   {
     return;
   }
@@ -125,15 +223,10 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     return;
   }
 
-  // Make sure that we have valid max_range
-  if (range_max_ < 0)
-  {
-    range_max_ = msg->range_max;
-  }
-
   // Find pose of the robot in odometry frame
   geometry_msgs::msg::PoseStamped odom_pose_tf;
-  odom_pose_tf.header = msg->header;
+  odom_pose_tf.header.stamp = msg->header.stamp;
+  odom_pose_tf.header.frame_id = laser_frame_;
   odom_pose_tf.pose.orientation.w = 1.0;
   try
   {
@@ -142,7 +235,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   catch (const tf2::TransformException& ex)
   {
     RCLCPP_ERROR(logger_, "Could not transform %s to %s frame.",
-                 msg->header.frame_id.c_str(), odom_frame_.c_str());
+                 laser_frame_.c_str(), odom_frame_.c_str());
     return;
   }
 
@@ -151,10 +244,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   scan->id = graph_->scans.size();
 
   // Convert pose to ndt_2d style
-  Pose2d odom_pose;
-  odom_pose.x = odom_pose_tf.pose.position.x;
-  odom_pose.y = odom_pose_tf.pose.position.y;
-  odom_pose.theta = tf2::getYaw(odom_pose_tf.pose.orientation);
+  Pose2d odom_pose(odom_pose_tf.pose.position.x, odom_pose_tf.pose.position.y,
+                   tf2::getYaw(odom_pose_tf.pose.orientation));
 
   // Make sure we have traveled far enough
   if (!graph_->scans.empty())
@@ -169,13 +260,14 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     {
       return;
     }
-    // Odometry and corrected frame may not be aligned - determine heading between them
+
+    // Odometry frame is usually not aligned with map frame
     double heading = angles::shortest_angular_distance(prev_odom_pose_.theta,
-                                                       graph_->scans.back()->pose.theta);
+                                                       prev_robot_pose_.theta);
     // Now apply odometry delta, corrected by heading, to get initial corrected pose
-    scan->pose.x = graph_->scans.back()->pose.x + (dx * cos(heading)) - (dy * sin(heading));
-    scan->pose.y = graph_->scans.back()->pose.y + (dx * sin(heading)) + (dy * cos(heading));
-    scan->pose.theta = angles::normalize_angle(graph_->scans.back()->pose.theta + dth);
+    scan->pose.x = prev_robot_pose_.x + (dx * cos(heading)) - (dy * sin(heading));
+    scan->pose.y = prev_robot_pose_.y + (dx * sin(heading)) + (dy * cos(heading));
+    scan->pose.theta = angles::normalize_angle(prev_robot_pose_.theta + dth);
   }
   else
   {
@@ -184,8 +276,6 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->pose.y = 0.0;
     scan->pose.theta = 0.0;
   }
-
-  RCLCPP_INFO(logger_, "Adding scan to map");
 
   // Using this scan, convert ROS msg into ndt_2d style scan
   scan->points.reserve(msg->ranges.size());
@@ -200,23 +290,12 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->points.push_back(point);
   }
 
-  RCLCPP_INFO(logger_, "Odom pose: %f, %f, %f", odom_pose.x, odom_pose.y, odom_pose.theta);
-
-  if (!graph_->scans.empty())
+  if (use_particle_filter_)
   {
-    // Determine rolling window
-    size_t rolling_start = (graph_->scans.size() <= rolling_depth_) ? 0 : graph_->scans.size() - 10;
-    auto rolling = graph_->scans.begin() + rolling_start;
-
-    // Build NDT of rolling window scans
-    std::shared_ptr<NDT> ndt;
-    buildNDT(rolling, graph_->scans.end(), ndt);
-
-    // Local consistency - match new scan against last 10 scans
     Pose2d correction;
-    double uncorrected_score = ndt->likelihood(scan);
-    matchScan(ndt, scan, correction, laser_max_beams_);
-    double score = ndt->likelihood(scan, correction);
+    double uncorrected_score = global_ndt_->likelihood(scan);
+    matchScan(global_ndt_, scan, correction, laser_max_beams_);
+    double score = global_ndt_->likelihood(scan, correction);
     RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
                 correction.x, correction.y, correction.theta, uncorrected_score, score);
 
@@ -224,42 +303,60 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->pose.x += correction.x;
     scan->pose.y += correction.y;
     scan->pose.theta += correction.theta;
+
+    prev_odom_pose_ = odom_pose;
+    prev_robot_pose_ = scan->pose;
   }
-
-  RCLCPP_INFO(logger_, "Corrected: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
-
-  // TODO(fergs): lock this when timer is converted to thread
+  else
   {
-    // Add odom constraint to the graph
+    RCLCPP_INFO(logger_, "Adding scan to map");
+    RCLCPP_INFO(logger_, "Odom pose: %f, %f, %f", odom_pose.x, odom_pose.y, odom_pose.theta);
+
     if (!graph_->scans.empty())
     {
-      ConstraintPtr constraint = std::make_shared<Constraint>();
-      constraint->begin = graph_->scans.size() - 1;
-      constraint->end = scan->id;
-      // Get the delta in map coordinates
-      double dx = scan->pose.x - graph_->scans.back()->pose.x;
-      double dy = scan->pose.y - graph_->scans.back()->pose.y;
-      // Convert dx/dy into the coordinate frame of begin->pose
-      double costh = cos(graph_->scans.back()->pose.theta);
-      double sinth = sin(graph_->scans.back()->pose.theta);
-      constraint->transform(0) = costh * dx + sinth * dy;
-      constraint->transform(1) = -sinth * dx + costh * dy;
-      constraint->transform(2) = scan->pose.theta - graph_->scans.back()->pose.theta;
-      // TODO(fergs): add proper information matrix
-      constraint->information(0, 0) = 100.0;
-      constraint->information(1, 1) = 100.0;
-      constraint->information(2, 2) = 20.0;
-      graph_->odom_constraints.push_back(constraint);
+      // Determine rolling window
+      size_t start = (graph_->scans.size() <= rolling_depth_) ? 0 : graph_->scans.size() - 10;
+      auto rolling = graph_->scans.begin() + start;
+
+      // Build NDT of rolling window scans
+      std::shared_ptr<NDT> ndt;
+      buildNDT(rolling, graph_->scans.end(), ndt);
+
+      // Local consistency - match new scan against last 10 scans
+      Pose2d correction;
+      double uncorrected_score = ndt->likelihood(scan);
+      matchScan(ndt, scan, correction, laser_max_beams_);
+      double score = ndt->likelihood(scan, correction);
+      RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
+                  correction.x, correction.y, correction.theta, uncorrected_score, score);
+
+      // Add correction to scan corrected pose
+      scan->pose.x += correction.x;
+      scan->pose.y += correction.y;
+      scan->pose.theta += correction.theta;
     }
 
-    // Append new scan to our graph
-    graph_->scans.push_back(scan);
-    prev_odom_pose_ = odom_pose;
-    map_update_available_ = true;
-  }
+    RCLCPP_INFO(logger_, "Corrected: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
 
-  // Global consistency - search scans for global matches
-  searchGlobalMatches(scan);
+    // TODO(fergs): lock this when timer is converted to thread
+    {
+      // Add odom constraint to the graph
+      if (!graph_->scans.empty())
+      {
+        ConstraintPtr constraint = makeConstraint(graph_->scans.back(), scan);
+        graph_->odom_constraints.push_back(constraint);
+      }
+
+      // Append new scan to our graph
+      graph_->scans.push_back(scan);
+      prev_odom_pose_ = odom_pose;
+      prev_robot_pose_ = scan->pose;
+      map_update_available_ = true;
+    }
+
+    // Global consistency - search scans for global matches
+    searchGlobalMatches(scan);
+  }
 }
 
 void Mapper::buildNDT(const std::vector<ScanPtr>::const_iterator& begin,
@@ -276,7 +373,7 @@ void Mapper::buildNDT(const std::vector<ScanPtr>::const_iterator& begin,
     min_x_ = std::min((*scan)->pose.x - range_max_, min_x_);
     max_x_ = std::max((*scan)->pose.x + range_max_, max_x_);
     min_y_ = std::min((*scan)->pose.y - range_max_, min_y_);
-    max_y_ = std::max((*scan)->pose.y + range_max_, max_x_);
+    max_y_ = std::max((*scan)->pose.y + range_max_, max_y_);
   }
 
   ndt = std::make_shared<NDT>(ndt_resolution_,
@@ -359,6 +456,9 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
   // TODO(fergs): apply a real NN search
   for (auto candidate = graph_->scans.begin(); candidate != rolling; ++candidate)
   {
+    // Make sure this scan has points
+    if ((*candidate)->points.empty()) continue;
+
     // Compute distance between candidate and scan
     // TODO(fergs): do this with barycentric coordinates
     double dx = scan->pose.x - (*candidate)->pose.x;
@@ -366,10 +466,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
     double d = (dx * dx) + (dy * dy);
 
     // If distance is too far apart, do not attempt to scan match
-    if (d > global_search_size_ * global_search_size_)
-    {
-      continue;
-    }
+    if (d > global_search_size_ * global_search_size_) continue;
 
     // Take one additional scan on either side of candidate
     auto begin = (candidate == graph_->scans.begin()) ? candidate : --candidate;
@@ -398,23 +495,9 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
       scan->pose.theta += correction.theta;
 
       // Add constraint to the graph
-      ConstraintPtr constraint = std::make_shared<Constraint>();
-      constraint->begin = (*candidate)->id;
-      constraint->end = scan->id;
-      // Get the delta in map coordinates
-      double dx = scan->pose.x - (*candidate)->pose.x;
-      double dy = scan->pose.y - (*candidate)->pose.y;
-      // Convert dx/dy into the coordinate frame of begin->pose
-      double costh = cos((*candidate)->pose.theta);
-      double sinth = sin((*candidate)->pose.theta);
-      constraint->transform(0) = costh * dx + sinth * dy;
-      constraint->transform(1) = -sinth * dx + costh * dy;
-      constraint->transform(2) = scan->pose.theta - (*candidate)->pose.theta;
-      // TODO(fergs): add proper information matrix
-      constraint->information(0, 0) = 100.0;
-      constraint->information(1, 1) = 100.0;
-      constraint->information(2, 2) = 20.0;
+      ConstraintPtr constraint = makeConstraint(*candidate, scan);
       graph_->loop_constraints.push_back(constraint);
+
       // TODO(fergs): only run this occasionally?
       solver_->optimize(graph_->odom_constraints, graph_->loop_constraints, graph_->scans);
     }
@@ -423,33 +506,24 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 
 void Mapper::publishTransform()
 {
-  // Latest corrected pose gives us map -> robot
-  Pose2d & corrected = graph_->scans.back()->pose;
-  Eigen::Isometry3d map_to_robot(Eigen::Translation3d(corrected.x, corrected.y, 0.0) *
-                                 Eigen::AngleAxisd(corrected.theta, Eigen::Vector3d::UnitZ()));
+  // prev_robot_pose_ pose gives us map -> robot
+  Eigen::Isometry3d map_to_robot = getTransform(prev_robot_pose_);
 
   // Latest odom pose gives us odom -> robot
-  Pose2d & odom = prev_odom_pose_;
-  Eigen::Isometry3d odom_to_robot(Eigen::Translation3d(odom.x, odom.y, 0.0) *
-                                  Eigen::AngleAxisd(odom.theta, Eigen::Vector3d::UnitZ()));
+  Eigen::Isometry3d odom_to_robot = getTransform(prev_odom_pose_);
 
   // Compute map -> odom
   Eigen::Isometry3d map_to_odom(map_to_robot * odom_to_robot.inverse());
 
   // Publish TF between map and odom
-  geometry_msgs::msg::TransformStamped transform;
+  geometry_msgs::msg::TransformStamped transform = tf2::eigenToTransform(map_to_odom);
   transform.header.stamp = this->now();
   transform.header.frame_id = "map";
   transform.child_frame_id = odom_frame_;
-  transform.transform.translation.x = map_to_odom.translation().x();
-  transform.transform.translation.y = map_to_odom.translation().y();
-  Eigen::Quaterniond q(map_to_odom.rotation());
-  transform.transform.rotation.z = q.z();
-  transform.transform.rotation.w = q.w();
   tf2_broadcaster_->sendTransform(transform);
 }
 
-// TODO(fergs): This should move to a separate thread
+// TODO(fergs): This should move to a separate thread, with proper locking
 void Mapper::mapPublishCallback()
 {
   if (!map_update_available_)
@@ -462,11 +536,7 @@ void Mapper::mapPublishCallback()
     return;
   }
 
-  {
-    // TODO(fergs): lock this when timer is converted to thread
-    map_update_available_ = false;
-  }
-
+  map_update_available_ = false;
   rclcpp::Time now = this->now();
 
   // Publish an occupancy grid
@@ -484,6 +554,27 @@ void Mapper::mapPublishCallback()
 
   // Publish TF
   publishTransform();
+}
+
+ConstraintPtr Mapper::makeConstraint(const ScanPtr & from, const ScanPtr & to) const
+{
+  ConstraintPtr constraint = std::make_shared<Constraint>();
+  constraint->begin = from->id;
+  constraint->end = to->id;
+  // Get the delta in map coordinates
+  double dx = to->pose.x - from->pose.x;
+  double dy = to->pose.y - from->pose.y;
+  // Convert dx/dy into the coordinate frame of begin->pose
+  double costh = cos(from->pose.theta);
+  double sinth = sin(from->pose.theta);
+  constraint->transform(0) = costh * dx + sinth * dy;
+  constraint->transform(1) = -sinth * dx + costh * dy;
+  constraint->transform(2) = to->pose.theta - from->pose.theta;
+  // TODO(fergs): add proper information matrix
+  constraint->information(0, 0) = 100.0;
+  constraint->information(1, 1) = 100.0;
+  constraint->information(2, 2) = 20.0;
+  return constraint;
 }
 
 }  // namespace ndt_2d

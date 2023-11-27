@@ -156,13 +156,9 @@ double NDT::likelihood(const ScanPtr& scan)
 
 double NDT::likelihood(const ScanPtr& scan, const Pose2d& correction)
 {
-  Eigen::Isometry3d transform_p(Eigen::Translation3d(scan->pose.x, scan->pose.y, 0.0) *
-                                Eigen::AngleAxisd(scan->pose.theta, Eigen::Vector3d::UnitZ()));
-
-  Eigen::Isometry3d transform_c(Eigen::Translation3d(correction.x, correction.y, 0.0) *
-                                Eigen::AngleAxisd(correction.theta, Eigen::Vector3d::UnitZ()));
-
-  Eigen::Isometry3d transform = transform_p * transform_c;
+  const Eigen::Isometry3d transform_p = toEigen(scan->pose);
+  const Eigen::Isometry3d transform_c = toEigen(correction);
+  const Eigen::Isometry3d transform = transform_p * transform_c;
 
   double score = 0.0;
   for (auto & point : scan->points)

@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 #include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
 #include <ndt_2d/ceres_solver.hpp>
 #include <ndt_2d/graph.hpp>
@@ -34,6 +35,9 @@ protected:
   /** @brief ROS callback for configure service */
   void configure(const std::shared_ptr<ndt_2d::srv::Configure::Request> request,
                  std::shared_ptr<ndt_2d::srv::Configure::Response> response);
+
+  /** @brief ROS callback for initializing localization */
+  void poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr& msg);
 
   /** @brief ROS callback for new laser scan */
   void laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg);
@@ -65,17 +69,30 @@ protected:
   void mapPublishCallback();
   bool map_update_available_;
 
-  // Parameters
+  // Various helpers
+  ConstraintPtr makeConstraint(const ScanPtr & from, const ScanPtr & to) const;
+  inline Eigen::Isometry3d getTransform(const Pose2d & pose)
+  {
+    Eigen::Isometry3d t(Eigen::Translation3d(pose.x, pose.y, 0.0) *
+                        Eigen::AngleAxisd(pose.theta, Eigen::Vector3d::UnitZ()));
+    return t;
+  }
+
+  // Mapping parameters
   double map_resolution_;
   double ndt_resolution_;
   double minimum_travel_distance_, minimum_travel_rotation_;
   size_t rolling_depth_;
-  std::string odom_frame_;
+  std::string odom_frame_, robot_frame_, laser_frame_;
   size_t laser_max_beams_;
   double search_angular_resolution_, search_angular_size_;
   double search_linear_resolution_, search_linear_size_;
   double global_search_size_;
   double range_max_;
+
+  // Localization parameters
+  bool use_particle_filter_;
+  std::shared_ptr<NDT> global_ndt_;
 
   // ROS 2 interfaces
   rclcpp::Logger logger_;
@@ -83,6 +100,7 @@ protected:
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr graph_pub_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_sub_;
   rclcpp::Service<ndt_2d::srv::Configure>::SharedPtr configure_srv_;
   std::shared_ptr<tf2_ros::Buffer> tf2_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf2_listener_;
@@ -91,9 +109,13 @@ protected:
   // Map data
   GraphPtr graph_;
   bool enable_mapping_;
-  // The previous odometry pose, corrected gets stored with the ScanPtr
+  // The previous odom_frame_->laser_frame_
   Pose2d prev_odom_pose_;
   bool prev_odom_pose_is_initialized_;
+  // The previous map->laser_frame_
+  Pose2d prev_robot_pose_;
+  // Transform from robot_frame->laser_frame_
+  Eigen::Isometry3d laser_transform_;
 
   // Graph optimization
   std::shared_ptr<CeresSolver> solver_;
