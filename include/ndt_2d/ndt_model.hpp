@@ -54,12 +54,6 @@ struct Pose2d
   double theta;
 };
 
-inline Eigen::Isometry3d toEigen(const Pose2d & p)
-{
-  return Eigen::Isometry3d(Eigen::Translation3d(p.x, p.y, 0.0) *
-                           Eigen::AngleAxisd(p.theta, Eigen::Vector3d::UnitZ()));
-}
-
 struct Scan
 {
   // Unique ID of the scan
@@ -86,13 +80,13 @@ struct Cell
   Cell();
 
   /** @brief Add a point to this cell */
-  void addPoint(const Point & p);
+  void addPoint(const Eigen::Vector2d & p);
 
   /** @brief Compute the cell values */
   void compute();
 
   /** @brief Score a point */
-  double score(const Point & p);
+  double score(const Eigen::Vector2d & p);
 
   // Are mean/cov valid;
   bool valid;
@@ -124,7 +118,7 @@ public:
    * @brief Add a scan to the NDT.
    * @param scan The points from laser scanner to be added.
    */
-  void addScan(const ScanPtr& scan);
+  void addScan(const ScanPtr & scan);
 
   /**
    * @brief Compute NDT cell values - this must be called after any
@@ -133,33 +127,48 @@ public:
   void compute();
 
   /**
+   * @brief Query the NDT for a given point.
+   * @param point The point to score.
+   * @returns The probability of the point.
+   */
+  double likelihood(const Eigen::Vector2d & point);
+
+  /**
+   * @brief Query the NDT for a given point.
+   * @param point The point to score.
+   * @returns The probability of the point.
+   */
+  double likelihood(const Eigen::Vector3d & point);
+
+  /**
    * @brief Query the NDT.
    * @param points The vector of points to score.
    * @returns The probability of the points.
    */
-  double likelihood(const std::vector<Point>& points);
+  double likelihood(const std::vector<Point> & points);
 
   /**
    * @brief Query the NDT.
-   * @param point The point to score.
-   * @returns The probability of the point.
+   * @param points The vector of points to score.
+   * @param pose All points will be translated as if this were the origin of the points.
+   * @returns The probability of the points.
    */
-  double likelihood(const Point& point);
+  double likelihood(const std::vector<Point> & points, const Pose2d & pose);
 
   /**
    * @brief Query the NDT.
-   * @param scan The scan to score. Note that pose WILL be used.
+   * @param scan The scan to score. Note that scan->pose WILL be used.
    * @returns The probability of the scan.
    */
-  double likelihood(const ScanPtr& scan);
+  double likelihood(const ScanPtr & scan);
 
   /**
    * @brief Query the NDT.
-   * @param scan The scan to score. Note that pose WILL be used.
+   * @param scan The scan to score. Note that scan->pose WILL be used.
    * @param correction Pose correction to add to scan pose.
    * @returns The probability of the scan.
    */
-  double likelihood(const ScanPtr& scan, const Pose2d& correction);
+  double likelihood(const ScanPtr & scan, const Pose2d & correction);
 
 private:
   /**

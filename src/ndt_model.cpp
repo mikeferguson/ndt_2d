@@ -7,6 +7,7 @@
 #include <Eigen/Eigen>
 
 #include <cmath>
+#include <ndt_2d/conversions.hpp>
 #include <ndt_2d/ndt_model.hpp>
 
 namespace ndt_2d
@@ -22,19 +23,14 @@ Cell::Cell()
 {
 }
 
-void Cell::addPoint(const Point & point)
+void Cell::addPoint(const Eigen::Vector2d & point)
 {
-  // TODO(fergs): take Eigen type directly
-  Eigen::Vector2d p;
-  p(0) = point.x;
-  p(1) = point.y;
-
-  mean = (mean * n + p) / (n + 1);
+  mean = (mean * n + point) / (n + 1);
   for (size_t i = 0; i < 2; ++i)
   {
     for (size_t j = i; j < 2; ++j)
     {
-      correlation(i, j) = (correlation(i, j) * n + p(i) * p(j)) / (n + 1);
+      correlation(i, j) = (correlation(i, j) * n + point(i) * point(j)) / (n + 1);
     }
   }
 
@@ -66,7 +62,7 @@ void Cell::compute()
   valid = true;
 }
 
-double Cell::score(const Point & point)
+double Cell::score(const Eigen::Vector2d & point)
 {
   if (n < 5)
   {
@@ -74,12 +70,7 @@ double Cell::score(const Point & point)
     return 0.0;
   }
 
-  // TODO(fergs): take Eigen type directly
-  Eigen::Vector2d p;
-  p(0) = point.x;
-  p(1) = point.y;
-
-  const auto q = p - mean;
+  const auto q = point - mean;
   const double exponent = -0.5 * q.transpose() * information * q;
   return std::exp(exponent);
 }
@@ -98,7 +89,7 @@ NDT::~NDT()
 {
 }
 
-void NDT::addScan(const ScanPtr& scan)
+void NDT::addScan(const ScanPtr & scan)
 {
   // Precompute transforms
   double cos_th = cos(scan->pose.theta);
@@ -107,12 +98,12 @@ void NDT::addScan(const ScanPtr& scan)
   for (auto & point : scan->points)
   {
     // Transform the point by pose
-    Point p(scan->pose.x, scan->pose.y);
-    p.x += point.x * cos_th - point.y * sin_th;
-    p.y += point.x * sin_th + point.y * cos_th;
+    Eigen::Vector2d p(scan->pose.x, scan->pose.y);
+    p(0) += point.x * cos_th - point.y * sin_th;
+    p(1) += point.x * sin_th + point.y * cos_th;
 
     // Determine index in NDT grid, add if valid index
-    int index = getIndex(p.x, p.y);
+    int index = getIndex(p(0), p(1));
     if (index >= 0)
     {
       cells_[index].addPoint(p);
@@ -128,19 +119,9 @@ void NDT::compute()
   }
 }
 
-double NDT::likelihood(const std::vector<Point>& points)
+double NDT::likelihood(const Eigen::Vector2d & point)
 {
-  double score = 0.0;
-  for (auto & point : points)
-  {
-    score += likelihood(point);
-  }
-  return score;
-}
-
-double NDT::likelihood(const Point& point)
-{
-  int index = getIndex(point.x, point.y);
+  int index = getIndex(point(0), point(1));
   if (index >= 0)
   {
     return cells_[index].score(point);
@@ -148,13 +129,43 @@ double NDT::likelihood(const Point& point)
   return 0.0;
 }
 
-double NDT::likelihood(const ScanPtr& scan)
+double NDT::likelihood(const Eigen::Vector3d & point)
+{
+  Eigen::Vector2d p(point(0), point(1));
+  return likelihood(p);
+}
+
+double NDT::likelihood(const std::vector<Point> & points)
+{
+  double score = 0.0;
+  for (auto & point : points)
+  {
+    Eigen::Vector2d p(point.x, point.y);
+    score += likelihood(p);
+  }
+  return score;
+}
+
+double NDT::likelihood(const std::vector<Point> & points, const Pose2d & pose)
+{
+  const Eigen::Isometry3d t = toEigen(pose);
+  double score = 0.0;
+  for (auto & point : points)
+  {
+    Eigen::Vector3d p(point.x, point.y, 1.0);
+    p = t * p;
+    score += likelihood(p);
+  }
+  return score;
+}
+
+double NDT::likelihood(const ScanPtr & scan)
 {
   Pose2d pose;
   return likelihood(scan, pose);
 }
 
-double NDT::likelihood(const ScanPtr& scan, const Pose2d& correction)
+double NDT::likelihood(const ScanPtr & scan, const Pose2d & correction)
 {
   const Eigen::Isometry3d transform_p = toEigen(scan->pose);
   const Eigen::Isometry3d transform_c = toEigen(correction);
@@ -163,12 +174,8 @@ double NDT::likelihood(const ScanPtr& scan, const Pose2d& correction)
   double score = 0.0;
   for (auto & point : scan->points)
   {
-    // Transform point
-    Eigen::Vector3d point_t(point.x, point.y, 1.0);
-    point_t = transform * point_t;
-
-    // Now score
-    Point p(point_t(0), point_t(1));
+    Eigen::Vector3d p(point.x, point.y, 1.0);
+    p = transform * p;
     score += likelihood(p);
   }
   return score;

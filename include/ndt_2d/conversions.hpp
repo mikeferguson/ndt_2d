@@ -14,8 +14,6 @@
 namespace ndt_2d
 {
 
-// These conversions are in a separate file to prevent ROS dependencies in core lib
-
 inline Pose2d fromMsg(const geometry_msgs::msg::Pose & msg)
 {
   return Pose2d(msg.position.x,
@@ -28,16 +26,22 @@ inline Pose2d fromMsg(const geometry_msgs::msg::PoseStamped & msg)
   return fromMsg(msg.pose);
 }
 
-Pose2d fromMsg(const geometry_msgs::msg::Transform & msg)
+inline Pose2d fromMsg(const geometry_msgs::msg::Transform & msg)
 {
   return Pose2d(msg.translation.x,
                 msg.translation.y,
                 tf2::getYaw(msg.rotation));
 }
 
-Pose2d fromMsg(const geometry_msgs::msg::TransformStamped & msg)
+inline Pose2d fromMsg(const geometry_msgs::msg::TransformStamped & msg)
 {
   return fromMsg(msg.transform);
+}
+
+inline Eigen::Isometry3d toEigen(const Pose2d & p)
+{
+  return Eigen::Isometry3d(Eigen::Translation3d(p.x, p.y, 0.0) *
+                           Eigen::AngleAxisd(p.theta, Eigen::Vector3d::UnitZ()));
 }
 
 }  // namespace ndt_2d

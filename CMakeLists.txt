@@ -56,6 +56,9 @@ add_library(ndt_2d_lib SHARED
   src/ndt_model.cpp
 )
 target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES} Eigen3::Eigen)
+ament_target_dependencies(ndt_2d_lib
+  tf2_ros
+)
 
 # Mapping node
 add_library(ndt_2d_mapper SHARED
