@@ -4,11 +4,11 @@
  */
 
 #include <angles/angles.h>
-#include <tf2/utils.h>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <cmath>
 #include <chrono>
+#include <ndt_2d/conversions.hpp>
 #include <ndt_2d/ndt_model.hpp>
 #include <ndt_2d/ndt_mapper.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
@@ -137,11 +137,10 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
   }
 
   // Find transform from odom to robot frames
-  Eigen::Isometry3d odom_to_robot;
+  geometry_msgs::msg::TransformStamped odom_to_robot;
   try
   {
-    odom_to_robot = tf2::transformToEigen(
-        tf2_buffer_->lookupTransform(odom_frame_, robot_frame_, tf2::TimePointZero));
+    odom_to_robot = tf2_buffer_->lookupTransform(odom_frame_, robot_frame_, tf2::TimePointZero);
   }
   catch (const tf2::TransformException& ex)
   {
@@ -150,22 +149,12 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
     return;
   }
 
-  // Compute transform from odom to laser
-  Eigen::Isometry3d odom_to_laser = odom_to_robot * laser_transform_;
-
-  // Compute transform from map to laser
-  Eigen::Isometry3d map_to_robot;
-  tf2::fromMsg(msg->pose.pose, map_to_robot);
-  Eigen::Isometry3d map_to_laser = map_to_robot * laser_transform_.inverse();
-
   // If mapping, connect this pose to the graph
   if (!use_particle_filter_)
   {
     ScanPtr scan(new Scan());
     scan->id = graph_->scans.size();
-    scan->pose.x = msg->pose.pose.position.x;
-    scan->pose.y = msg->pose.pose.position.y;
-    scan->pose.theta = tf2::getYaw(msg->pose.pose.orientation);
+    scan->pose = fromMsg(msg->pose.pose);
 
     // Find the closest node in existing graph, then add scan to graph
     size_t nearest = graph_->findNearest(scan);
@@ -176,13 +165,13 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
     graph_->loop_constraints.push_back(constraint);
   }
 
-  // Localize laser frame
-  prev_robot_pose_ = fromEigen(map_to_laser);
-  prev_odom_pose_ = fromEigen(odom_to_laser);
+  // Localize robot
+  prev_robot_pose_ = fromMsg(msg->pose.pose);
+  prev_odom_pose_ = fromMsg(odom_to_robot);
   prev_odom_pose_is_initialized_ = true;
 
-  RCLCPP_INFO(logger_, "Localized to %f, %f, %f", msg->pose.pose.position.x,
-              msg->pose.pose.position.x, tf2::getYaw(msg->pose.pose.orientation));
+  RCLCPP_INFO(logger_, "Localized to %f, %f, %f", prev_robot_pose_.x,
+              prev_robot_pose_.x, prev_robot_pose_.theta);
 }
 
 void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg)
@@ -194,8 +183,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     try
     {
       // Determine pose of laser relative to base
-      laser_transform_ = tf2::transformToEigen(
-        tf2_buffer_->lookupTransform(robot_frame_, msg->header.frame_id, tf2::TimePointZero));
+      auto t = tf2_buffer_->lookupTransform(robot_frame_, msg->header.frame_id, tf2::TimePointZero);
+      laser_transform_ = fromMsg(t);
     }
     catch (const tf2::TransformException& ex)
     {
@@ -226,7 +215,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   // Find pose of the robot in odometry frame
   geometry_msgs::msg::PoseStamped odom_pose_tf;
   odom_pose_tf.header.stamp = msg->header.stamp;
-  odom_pose_tf.header.frame_id = laser_frame_;
+  odom_pose_tf.header.frame_id = robot_frame_;
   odom_pose_tf.pose.orientation.w = 1.0;
   try
   {
@@ -235,7 +224,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   catch (const tf2::TransformException& ex)
   {
     RCLCPP_ERROR(logger_, "Could not transform %s to %s frame.",
-                 laser_frame_.c_str(), odom_frame_.c_str());
+                 robot_frame_.c_str(), odom_frame_.c_str());
     return;
   }
 
@@ -244,8 +233,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   scan->id = graph_->scans.size();
 
   // Convert pose to ndt_2d style
-  Pose2d odom_pose(odom_pose_tf.pose.position.x, odom_pose_tf.pose.position.y,
-                   tf2::getYaw(odom_pose_tf.pose.orientation));
+  Pose2d odom_pose = fromMsg(odom_pose_tf);
 
   // Make sure we have traveled far enough
   if (!graph_->scans.empty())
@@ -277,16 +265,24 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->pose.theta = 0.0;
   }
 
+  // Minor optimization
+  double cos_lt = cos(laser_transform_.theta);
+  double sin_lt = sin(laser_transform_.theta);
+
   // Using this scan, convert ROS msg into ndt_2d style scan
   scan->points.reserve(msg->ranges.size());
   for (size_t i = 0; i < msg->ranges.size(); ++i)
   {
     // Filter out NANs and scans beyond max range
     if (std::isnan(msg->ranges[i]) || msg->ranges[i] > range_max_) continue;
-    // Project point and push into scan
+    // Project point in laser frame
     double angle = msg->angle_min + i * msg->angle_increment;
-    Point point(cos(angle) * msg->ranges[i],
-                sin(angle) * msg->ranges[i]);
+    Point lp(cos(angle) * msg->ranges[i],
+             sin(angle) * msg->ranges[i]);
+    // Transform to robot frame
+    Point point(cos_lt * lp.x - sin_lt * lp.y + laser_transform_.x,
+                sin_lt * lp.x + cos_lt * lp.y + laser_transform_.y);
+    // Add point to scan
     scan->points.push_back(point);
   }
 

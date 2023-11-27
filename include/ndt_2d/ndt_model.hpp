@@ -60,14 +60,6 @@ inline Eigen::Isometry3d toEigen(const Pose2d & p)
                            Eigen::AngleAxisd(p.theta, Eigen::Vector3d::UnitZ()));
 }
 
-inline Pose2d fromEigen(const Eigen::Isometry3d & t)
-{
-  Eigen::Quaterniond q(t.linear());
-  auto euler = q.toRotationMatrix().eulerAngles(0, 1, 2);
-  return Pose2d(t.translation().x(), t.translation().y(),
-                euler(2));
-}
-
 struct Scan
 {
   // Unique ID of the scan

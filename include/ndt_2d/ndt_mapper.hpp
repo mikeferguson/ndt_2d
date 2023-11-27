@@ -109,13 +109,13 @@ protected:
   // Map data
   GraphPtr graph_;
   bool enable_mapping_;
-  // The previous odom_frame_->laser_frame_
+  // The previous odom_frame_->robot_frame_
   Pose2d prev_odom_pose_;
   bool prev_odom_pose_is_initialized_;
-  // The previous map->laser_frame_
+  // The previous map->robot_frame_
   Pose2d prev_robot_pose_;
-  // Transform from robot_frame->laser_frame_
-  Eigen::Isometry3d laser_transform_;
+  // Transform from robot_frame_->laser_frame_
+  Pose2d laser_transform_;
 
   // Graph optimization
   std::shared_ptr<CeresSolver> solver_;
