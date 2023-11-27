@@ -18,6 +18,7 @@
 #include <ndt_2d/ceres_solver.hpp>
 #include <ndt_2d/graph.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
+#include <ndt_2d/particle_filter.hpp>
 #include <ndt_2d/srv/configure.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -92,6 +93,7 @@ protected:
 
   // Localization parameters
   bool use_particle_filter_;
+  std::shared_ptr<ParticleFilter> filter_;
   std::shared_ptr<NDT> global_ndt_;
 
   // ROS 2 interfaces

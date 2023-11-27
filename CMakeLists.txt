@@ -63,8 +63,10 @@ ament_target_dependencies(ndt_2d_lib
 # Mapping node
 add_library(ndt_2d_mapper SHARED
   src/graph.cpp
+  src/motion_model.cpp
   src/ndt_mapper.cpp
   src/occupancy_grid.cpp
+  src/particle_filter.cpp
 )
 ament_target_dependencies(ndt_2d_mapper ${dependencies})
 target_link_libraries(ndt_2d_mapper ndt_2d_lib "${cpp_typesupport_target}")
@@ -82,13 +84,17 @@ if(BUILD_TESTING)
   target_link_libraries(ceres_solver_tests ndt_2d_lib)
   ament_target_dependencies(ceres_solver_tests ${dependencies})
 
+  ament_add_gtest(graph_tests test/graph_tests.cpp)
+  target_link_libraries(graph_tests ndt_2d_lib ndt_2d_mapper)
+  ament_target_dependencies(graph_tests ${dependencies})
+
   ament_add_gtest(ndt_model_tests test/ndt_model_tests.cpp)
   target_link_libraries(ndt_model_tests ndt_2d_lib)
   ament_target_dependencies(ndt_model_tests ${dependencies})
 
-  ament_add_gtest(graph_tests test/graph_tests.cpp)
-  target_link_libraries(graph_tests ndt_2d_lib ndt_2d_mapper)
-  ament_target_dependencies(graph_tests ${dependencies})
+  ament_add_gtest(particle_tests test/particle_tests.cpp)
+  target_link_libraries(particle_tests ndt_2d_lib ndt_2d_mapper)
+  ament_target_dependencies(particle_tests ${dependencies})
 endif()
 
 install(

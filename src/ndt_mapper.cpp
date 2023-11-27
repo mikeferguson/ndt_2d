@@ -24,7 +24,6 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
 : rclcpp::Node("ndt_2d_mapper", options),
   map_update_available_(false),
   logger_(rclcpp::get_logger("ndt_2d_mapper")),
-  enable_mapping_(true),
   prev_odom_pose_is_initialized_(true)
 {
   map_resolution_ = this->declare_parameter<double>("resolution", 0.05);
@@ -40,7 +39,24 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   search_linear_resolution_ = this->declare_parameter<double>("search_linear_resolution", 0.005);
   search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
   global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
+
   use_particle_filter_ = this->declare_parameter<bool>("use_particle_filter", false);
+  if (use_particle_filter_)
+  {
+    double a1 = this->declare_parameter<double>("odom_alpha1", 0.2);
+    double a2 = this->declare_parameter<double>("odom_alpha2", 0.2);
+    double a3 = this->declare_parameter<double>("odom_alpha3", 0.2);
+    double a4 = this->declare_parameter<double>("odom_alpha4", 0.2);
+    double a5 = this->declare_parameter<double>("odom_alpha5", 0.2);
+    MotionModelPtr model = std::make_shared<MotionModel>(a1, a2, a3, a4, a5);
+
+    size_t min_p = this->declare_parameter<int>("min_particles", 100);
+    size_t max_p = this->declare_parameter<int>("max_particles", 500);
+
+    filter_ = std::make_shared<ParticleFilter>(min_p, max_p, model);
+  }
+
+  enable_mapping_ = this->declare_parameter<bool>("enable_mapping", true);
 
   // TODO(fergs): Load ROS params for solver
   solver_ = std::make_shared<CeresSolver>();
@@ -149,9 +165,19 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
     return;
   }
 
-  // If mapping, connect this pose to the graph
-  if (!use_particle_filter_)
+  if (use_particle_filter_)
   {
+    // Initialize particle filter
+    filter_->init(msg->pose.pose.position.x,
+                  msg->pose.pose.position.y,
+                  tf2::getYaw(msg->pose.pose.orientation),
+                  sqrt(msg->pose.covariance[0]),
+                  sqrt(msg->pose.covariance[7]),
+                  sqrt(msg->pose.covariance[35]));
+  }
+  else if (enable_mapping_)
+  {
+    // If mapping, connect this pose to the graph
     ScanPtr scan(new Scan());
     scan->id = graph_->scans.size();
     scan->pose = fromMsg(msg->pose.pose);
@@ -171,7 +197,7 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
   prev_odom_pose_is_initialized_ = true;
 
   RCLCPP_INFO(logger_, "Localized to %f, %f, %f", prev_robot_pose_.x,
-              prev_robot_pose_.x, prev_robot_pose_.theta);
+              prev_robot_pose_.y, prev_robot_pose_.theta);
 }
 
 void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg)
@@ -194,21 +220,16 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     laser_frame_ = msg->header.frame_id;
 
     // range_max_ must be set before building the global_ndt_
-    if (use_particle_filter_)
+    if (use_particle_filter_ || !enable_mapping_)
     {
       buildNDT(graph_->scans.begin(), graph_->scans.end(), global_ndt_);
     }
   }
 
-  if (!enable_mapping_ && !use_particle_filter_)
-  {
-    return;
-  }
-
   // If we have loaded a previous map, need to localize first
   if (!prev_odom_pose_is_initialized_)
   {
-    RCLCPP_WARN(logger_, "Can not build map, not localized within existing map");
+    RCLCPP_WARN(logger_, "Can not handle scan, not localized within map");
     return;
   }
 
@@ -288,22 +309,33 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
   if (use_particle_filter_)
   {
-    Pose2d correction;
-    double uncorrected_score = global_ndt_->likelihood(scan);
-    matchScan(global_ndt_, scan, correction, laser_max_beams_);
-    double score = global_ndt_->likelihood(scan, correction);
-    RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
-                correction.x, correction.y, correction.theta, uncorrected_score, score);
+    // Extract change in pose (in robot frame)
+    double map_dx = scan->pose.x - prev_robot_pose_.x;
+    double map_dy = scan->pose.y - prev_robot_pose_.y;
 
-    // Add correction to scan corrected pose
-    scan->pose.x += correction.x;
-    scan->pose.y += correction.y;
-    scan->pose.theta += correction.theta;
+    double robot_dx = map_dx * cos(prev_robot_pose_.theta) - map_dy * sin(prev_robot_pose_.theta);
+    double robot_dy = map_dx * sin(prev_robot_pose_.theta) + map_dy * cos(prev_robot_pose_.theta);
+    double robot_dtheta = angles::shortest_angular_distance(prev_robot_pose_.theta,
+                                                            scan->pose.theta);
+
+    RCLCPP_INFO(logger_, "Updating filter with control %f %f %f", robot_dx,
+                         robot_dy, robot_dtheta);
+
+    filter_->update(robot_dx, robot_dy, robot_dtheta);
+    filter_->measure(global_ndt_, scan);
+    filter_->resample();
+
+    auto mean = filter_->getMean();
+    scan->pose.x = mean(0);
+    scan->pose.y = mean(1);
+    scan->pose.theta = mean(2);
+
+    RCLCPP_INFO(logger_, "New pose: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
 
     prev_odom_pose_ = odom_pose;
     prev_robot_pose_ = scan->pose;
   }
-  else
+  else if (enable_mapping_)
   {
     RCLCPP_INFO(logger_, "Adding scan to map");
     RCLCPP_INFO(logger_, "Odom pose: %f, %f, %f", odom_pose.x, odom_pose.y, odom_pose.theta);
@@ -352,6 +384,24 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
     // Global consistency - search scans for global matches
     searchGlobalMatches(scan);
+  }
+  else
+  {
+    // Not using particle filter, nor mapping, just track motion of robot
+    Pose2d correction;
+    double uncorrected_score = global_ndt_->likelihood(scan);
+    matchScan(global_ndt_, scan, correction, laser_max_beams_);
+    double score = global_ndt_->likelihood(scan, correction);
+    RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
+                correction.x, correction.y, correction.theta, uncorrected_score, score);
+
+    // Add correction to scan corrected pose
+    scan->pose.x += correction.x;
+    scan->pose.y += correction.y;
+    scan->pose.theta += correction.theta;
+
+    prev_odom_pose_ = odom_pose;
+    prev_robot_pose_ = scan->pose;
   }
 }
 
