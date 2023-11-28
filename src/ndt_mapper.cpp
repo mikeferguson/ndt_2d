@@ -140,7 +140,7 @@ void Mapper::configure(const std::shared_ptr<srv::Configure::Request> request,
 
 void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr& msg)
 {
-  if (!use_particle_filter_ && prev_odom_pose_is_initialized_)
+  if (enable_mapping_ && prev_odom_pose_is_initialized_)
   {
     RCLCPP_WARN(logger_, "Ignoring initial pose, already mapping");
     return;
