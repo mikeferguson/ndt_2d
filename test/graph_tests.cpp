@@ -51,7 +51,26 @@ TEST(GraphTests, read_write_test)
     constraint->transform(2) = 0.0;
     graph.odom_constraints.push_back(constraint);
 
+    // Save simple graph for later testing of the load function
     graph.save(BAG_NAME);
+
+    ndt_2d::ScanPtr scan2 = std::make_shared<ndt_2d::Scan>();
+    scan2->id = 2;
+    scan2->points.resize(3);
+    scan2->points[0].x = 1.0;
+    scan2->points[0].y = 1.5;
+    scan2->points[1].x = 2.0;
+    scan2->points[1].y = 1.5;
+    scan2->points[2].x = 3.0;
+    scan2->points[2].y = 2.5;
+    scan2->pose.x = 1.0;
+    scan2->pose.y = 2.3;
+    scan2->pose.theta = 0.05;
+
+    std::vector<size_t> near = graph.findNearest(scan2);
+    EXPECT_EQ(2, near.size());
+    EXPECT_EQ(1, near[0]);
+    EXPECT_EQ(0, near[1]);
   }
 
   ndt_2d::Graph new_graph(BAG_NAME);

@@ -183,11 +183,16 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
     scan->pose = fromMsg(msg->pose.pose);
 
     // Find the closest node in existing graph, then add scan to graph
-    size_t nearest = graph_->findNearest(scan);
+    std::vector<size_t> nearest = graph_->findNearest(scan);
+    if (nearest.empty())
+    {
+      RCLCPP_ERROR(logger_, "Cannot localize robot, not close enough to existing graph");
+      return;
+    }
     graph_->scans.push_back(scan);
 
     // Add a constraint
-    ConstraintPtr constraint = makeConstraint(graph_->scans[nearest], scan);
+    ConstraintPtr constraint = makeConstraint(graph_->scans[nearest[0]], scan);
     graph_->loop_constraints.push_back(constraint);
   }
 

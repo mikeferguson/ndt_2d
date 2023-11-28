@@ -145,23 +145,27 @@ bool Graph::save(const std::string & filename)
   return true;
 }
 
-size_t Graph::findNearest(const ScanPtr & scan) const
+std::vector<size_t> Graph::findNearest(const ScanPtr & scan, double dist, int limit_scan_index)
 {
-  double dist = std::numeric_limits<double>::max();
-  size_t nearest = 0;
-  for (size_t i = 0; i < scans.size(); ++i)
+  // Build a KD-tree from scratch each time - no sense with bookkeeping to use dynamic
+  // tree, since it rebuilds index from scratch: https://github.com/jlblancoc/nanoflann/issues/90
+  size_t limit = (limit_scan_index > 0) ? limit_scan_index : scans.size();
+  GraphAdapter adapter(this, limit);
+  kd_tree_t tree(2 /* dimension */, adapter, 5 /* leaf size */);
+  tree.buildIndex();
+
+  // Search KD-tree for neighbors
+  const double query[2] = {scan->pose.x, scan->pose.y};
+  std::vector<std::pair<unsigned, double>> matches;
+  nanoflann::SearchParams params;
+  tree.radiusSearch(query, dist, matches, params);
+
+  std::vector<size_t> indicies;
+  for (size_t i = 0; i < matches.size(); ++i)
   {
-    // Compute distance between candidate and scan
-    double dx = scan->pose.x - scans[i]->pose.x;
-    double dy = scan->pose.y - scans[i]->pose.y;
-    double d = (dx * dx) + (dy * dy);
-    if (d < dist)
-    {
-      dist = d;
-      nearest = i;
-    }
+    indicies.push_back(matches[i].first);
   }
-  return nearest;
+  return indicies;
 }
 
 void Graph::getMsg(visualization_msgs::msg::MarkerArray & msg, rclcpp::Time & t)
