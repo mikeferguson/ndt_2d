@@ -8,6 +8,7 @@
 #include <Eigen/Geometry>
 #include <cmath>
 #include <chrono>
+#include <iostream>
 #include <ndt_2d/conversions.hpp>
 #include <ndt_2d/ndt_model.hpp>
 #include <ndt_2d/ndt_mapper.hpp>
@@ -216,11 +217,14 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       // Determine pose of laser relative to base
       auto t = tf2_buffer_->lookupTransform(robot_frame_, msg->header.frame_id, tf2::TimePointZero);
       laser_transform_ = fromMsg(t);
+      RCLCPP_INFO(logger_, "Robot -> laser transform: %f, %f, %f",
+                           laser_transform_.x, laser_transform_.y, laser_transform_.theta);
     }
     catch (const tf2::TransformException& ex)
     {
       RCLCPP_ERROR(logger_, "Could not transform %s to %s frame.",
                    robot_frame_.c_str(), msg->header.frame_id.c_str());
+      return;
     }
     laser_frame_ = msg->header.frame_id;
 
