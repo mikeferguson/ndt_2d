@@ -500,28 +500,26 @@ double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
 
 void Mapper::searchGlobalMatches(ScanPtr & scan)
 {
-  // Determine where rolling window starts
-  size_t rolling_start = (graph_->scans.size() <= rolling_depth_) ? 0 : graph_->scans.size() - 10;
-  auto rolling = graph_->scans.begin() + rolling_start;
-
-  // TODO(fergs): apply a real NN search
-  for (auto candidate = graph_->scans.begin(); candidate != rolling; ++candidate)
+  // Can't do a global search until we have at least enough scans
+  if (graph_->scans.size() <= rolling_depth_)
   {
-    // Make sure this scan has points
-    if ((*candidate)->points.empty()) continue;
+    return;
+  }
 
-    // Compute distance between candidate and scan
-    // TODO(fergs): do this with barycentric coordinates
-    double dx = scan->pose.x - (*candidate)->pose.x;
-    double dy = scan->pose.y - (*candidate)->pose.y;
-    double d = (dx * dx) + (dy * dy);
+  // Determine where rolling window starts
+  size_t rolling = graph_->scans.size() - rolling_depth_;
 
-    // If distance is too far apart, do not attempt to scan match
-    if (d > global_search_size_ * global_search_size_) continue;
+  std::vector<size_t> scans = graph_->findNearest(scan, global_search_size_, rolling);
+  for (auto i : scans)
+  {
+    const auto & candidate = graph_->scans[i];
+    if (candidate->points.empty()) continue;
 
     // Take one additional scan on either side of candidate
-    auto begin = (candidate == graph_->scans.begin()) ? candidate : --candidate;
-    auto end = (candidate == rolling) ? candidate : ++candidate;
+    size_t begin_idx = (i > 0) ? i - 1: i;
+    size_t end_idx = (i < rolling) ? i + 1 : i;
+    auto begin = graph_->scans.begin() + begin_idx;
+    auto end = graph_->scans.begin() + end_idx;
 
     // Build NDT of candidate region
     std::shared_ptr<NDT> ndt;
@@ -537,8 +535,8 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 
     if (score < uncorrected_score)
     {
-      std::cout << "Adding loop closure: " << (*candidate)->id << " to " << scan->id << std::endl;
-      std::cout << "  Improves score from " << uncorrected_score << " to " << score << std::endl;
+      RCLCPP_INFO(logger_, "Adding loop closure from %lu to %lu (score %f -> %f)",
+                           candidate->id, scan->id, uncorrected_score, score);
 
       // Correct pose
       scan->pose.x += correction.x;
@@ -546,7 +544,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
       scan->pose.theta += correction.theta;
 
       // Add constraint to the graph
-      ConstraintPtr constraint = makeConstraint(*candidate, scan);
+      ConstraintPtr constraint = makeConstraint(candidate, scan);
       graph_->loop_constraints.push_back(constraint);
 
       // TODO(fergs): only run this occasionally?
