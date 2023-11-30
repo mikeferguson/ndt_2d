@@ -28,10 +28,10 @@ void MotionModel::sample(const double dx, const double dy, const double dth,
   double rot2 = angle_diff(rot1, dth);
 
   // Reverse motion should not cause massive errors
-  double rot1_ = std::min(angle_diff(rot1, 0.0),
-                          angle_diff(rot1, M_PI));
-  double rot2_ = std::min(angle_diff(rot2, 0.0),
-                          angle_diff(rot2, M_PI));
+  double rot1_ = std::min(std::fabs(angle_diff(rot1, 0.0)),
+                          std::fabs(angle_diff(rot1, M_PI)));
+  double rot2_ = std::min(std::fabs(angle_diff(rot2, 0.0)),
+                          std::fabs(angle_diff(rot2, M_PI)));
 
   // Determine standard deviation
   double sigma_rot1 = std::sqrt(a1_ * rot1_ * rot1_ +

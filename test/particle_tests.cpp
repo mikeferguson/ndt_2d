@@ -42,6 +42,54 @@ TEST(ParticleTests, test_particle_filter)
   EXPECT_NEAR(mean(0), 0.0, 0.3);
   EXPECT_NEAR(mean(1), 0.0, 0.3);
   EXPECT_NEAR(mean(2), 1.57, 0.3);
+  // Now move forward
+  model->sample(1.0, 0.0, 0.0, poses);
+  mean = getMean(poses);
+  EXPECT_NEAR(mean(0), 0.0, 0.3);
+  EXPECT_NEAR(mean(1), 1.0, 0.3);
+  EXPECT_NEAR(mean(2), 1.57, 0.3);
+  // Move forward again
+  model->sample(1.0, 0.0, 0.0, poses);
+  mean = getMean(poses);
+  EXPECT_NEAR(mean(0), 0.0, 0.5);
+  EXPECT_NEAR(mean(1), 2.0, 0.5);
+  EXPECT_NEAR(mean(2), 1.57, 0.5);
+
+  // Test in place rotation in opposite direction
+  poses.assign(50, Eigen::Vector3d(0.0, 0.0, 0.0));
+  model->sample(0.0, 0.0, -1.57, poses);
+  mean = getMean(poses);
+  EXPECT_NEAR(mean(0), 0.0, 0.3);
+  EXPECT_NEAR(mean(1), 0.0, 0.3);
+  EXPECT_NEAR(mean(2), -1.57, 0.3);
+  // Now move forward
+  model->sample(1.0, 0.0, 0.0, poses);
+  mean = getMean(poses);
+  EXPECT_NEAR(mean(0), 0.0, 0.3);
+  EXPECT_NEAR(mean(1), -1.0, 0.3);
+  EXPECT_NEAR(mean(2), -1.57, 0.3);
+  // Move forward again
+  model->sample(1.0, 0.0, 0.0, poses);
+  mean = getMean(poses);
+  EXPECT_NEAR(mean(0), 0.0, 0.5);
+  EXPECT_NEAR(mean(1), -2.0, 0.5);
+  EXPECT_NEAR(mean(2), -1.57, 0.5);
+
+  // Test in place rotation will small disturbance
+  poses.assign(50, Eigen::Vector3d(0.0, 0.0, 0.0));
+  model->sample(0.01, -0.01, 1.57, poses);
+  mean = getMean(poses);
+  EXPECT_NEAR(mean(0), 0.0, 0.3);
+  EXPECT_NEAR(mean(1), 0.0, 0.3);
+  EXPECT_NEAR(mean(2), 1.57, 0.3);
+
+  // Test in place rotation in other direction will small disturbance
+  poses.assign(50, Eigen::Vector3d(0.0, 0.0, 0.0));
+  model->sample(0.01, -0.01, -1.57, poses);
+  mean = getMean(poses);
+  EXPECT_NEAR(mean(0), 0.0, 0.3);
+  EXPECT_NEAR(mean(1), 0.0, 0.3);
+  EXPECT_NEAR(mean(2), -1.57, 0.3);
 
   // Test backward motion
   poses.assign(50, Eigen::Vector3d(0.0, 0.0, 0.0));

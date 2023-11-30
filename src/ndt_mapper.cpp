@@ -330,19 +330,23 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
   if (use_particle_filter_)
   {
-    // Extract change in pose (in robot frame)
-    double map_dx = scan->pose.x - prev_robot_pose_.x;
-    double map_dy = scan->pose.y - prev_robot_pose_.y;
+    // Extract change in position in map frame
+    Eigen::Vector3d map_delta(scan->pose.x - prev_robot_pose_.x,
+                              scan->pose.y - prev_robot_pose_.y,
+                              1.0);
+    // Transform change in pose into robot-centric frame
+    Eigen::Isometry3d transform(Eigen::Translation3d(0.0, 0.0, 0.0) *
+                                Eigen::AngleAxisd(prev_robot_pose_.theta,
+                                                  Eigen::Vector3d::UnitZ()));
+    Eigen::Vector3d robot_delta = transform.inverse() * map_delta;
+    // Compute change in heading
+    robot_delta(2) = angles::shortest_angular_distance(prev_robot_pose_.theta,
+                                                       scan->pose.theta);
 
-    double robot_dx = map_dx * cos(prev_robot_pose_.theta) - map_dy * sin(prev_robot_pose_.theta);
-    double robot_dy = map_dx * sin(prev_robot_pose_.theta) + map_dy * cos(prev_robot_pose_.theta);
-    double robot_dtheta = angles::shortest_angular_distance(prev_robot_pose_.theta,
-                                                            scan->pose.theta);
+    RCLCPP_INFO(logger_, "Updating filter with control %f %f %f", robot_delta(0),
+                         robot_delta(1), robot_delta(2));
 
-    RCLCPP_INFO(logger_, "Updating filter with control %f %f %f", robot_dx,
-                         robot_dy, robot_dtheta);
-
-    filter_->update(robot_dx, robot_dy, robot_dtheta);
+    filter_->update(robot_delta(0), robot_delta(1), robot_delta(2));
     filter_->measure(global_ndt_, scan);
     filter_->resample();
 
