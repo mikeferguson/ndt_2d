@@ -101,6 +101,7 @@ protected:
   rclcpp::TimerBase::SharedPtr map_publish_timer_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr graph_pub_;
+  rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr particle_pub_;
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr laser_sub_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_sub_;
   rclcpp::Service<ndt_2d::srv::Configure>::SharedPtr configure_srv_;

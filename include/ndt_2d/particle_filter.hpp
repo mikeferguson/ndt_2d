@@ -9,8 +9,10 @@
 #include <Eigen/Core>
 #include <memory>
 #include <vector>
+#include <geometry_msgs/msg/pose_array.hpp>
 #include <ndt_2d/motion_model.hpp>
 #include <ndt_2d/ndt_model.hpp>
+#include <rclcpp/rclcpp.hpp>
 
 namespace ndt_2d
 {
@@ -60,6 +62,9 @@ public:
 
   /** @brief Get the covariance matrix for the particle distribution. */
   Eigen::Matrix3d getCovariance();
+
+  /** @brief Get a visualization message of the particle poses. */
+  void getMsg(geometry_msgs::msg::PoseArray & msg);
 
 private:
   // Internal helper: normalize weights, compute mean and covariance

@@ -100,6 +100,12 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
     "scan", rclcpp::SystemDefaultsQoS(),
     std::bind(&Mapper::laserCallback, this, std::placeholders::_1));
 
+  if (use_particle_filter_)
+  {
+    particle_pub_ = this->create_publisher<geometry_msgs::msg::PoseArray>(
+      "particlecloud", rclcpp::SystemDefaultsQoS());
+  }
+
   map_publish_timer_ = this->create_wall_timer(std::chrono::milliseconds(250),
     std::bind(&Mapper::mapPublishCallback, this));
 }
@@ -175,6 +181,12 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
                   sqrt(msg->pose.covariance[0]),
                   sqrt(msg->pose.covariance[7]),
                   sqrt(msg->pose.covariance[35]));
+    // Publish visualization
+    geometry_msgs::msg::PoseArray msg;
+    msg.header.frame_id = "map";
+    msg.header.stamp = this->now();
+    filter_->getMsg(msg);
+    particle_pub_->publish(msg);
   }
   else if (enable_mapping_)
   {
@@ -338,6 +350,13 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     scan->pose.x = mean(0);
     scan->pose.y = mean(1);
     scan->pose.theta = mean(2);
+
+    // Publish visualization
+    geometry_msgs::msg::PoseArray msg;
+    msg.header.frame_id = "map";
+    msg.header.stamp = this->now();
+    filter_->getMsg(msg);
+    particle_pub_->publish(msg);
 
     RCLCPP_INFO(logger_, "New pose: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
 
