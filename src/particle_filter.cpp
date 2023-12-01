@@ -17,7 +17,8 @@ ParticleFilter::ParticleFilter(size_t min_particles, size_t max_particles,
   min_particles_(min_particles),
   max_particles_(max_particles),
   mean_(Eigen::Vector3d::Zero()),
-  cov_(Eigen::Matrix3d::Zero())
+  cov_(Eigen::Matrix3d::Zero()),
+  kd_tree_(0.5, 0.5, 0.2671, max_particles)
 {
   particles_.reserve(max_particles_);
   weights_.reserve(max_particles_);
@@ -63,19 +64,50 @@ void ParticleFilter::measure(const std::shared_ptr<NDT> & ndt, const ScanPtr & s
   updateStatistics();
 }
 
-void ParticleFilter::resample()
+void ParticleFilter::resample(const double kld_err, const double kld_z)
 {
+  // Sampling particles based on current weights
   std::discrete_distribution<size_t> d(weights_.begin(), weights_.end());
 
-  std::vector<Particle> resampled;
-  resampled.reserve(particles_.size());
+  // Re-initialize all of the bins to empty
+  kd_tree_.clear();
 
-  for (size_t i = 0; i < particles_.size(); ++i)
+  std::vector<Particle> resampled;
+  resampled.reserve(max_particles_);
+
+  std::vector<double> resampled_weights;
+  resampled_weights.reserve(max_particles_);
+
+  // This will be the crazy equation from Probabilistic Robotics
+  size_t Mx = max_particles_;
+
+  while (resampled.size() < std::max(min_particles_, Mx))
   {
-    resampled.push_back(particles_[d(gen_)]);
+    // Sample a particle - NOTE: KLD paper says we should apply motion model & update here?
+    size_t p = d(gen_);
+    kd_tree_.insert(particles_[p], weights_[p]);
+    resampled.push_back(particles_[p]);
+    resampled_weights.push_back(weights_[p]);
+
+    // Recompute crazy equation
+    size_t k = kd_tree_.getLeafCount();
+    if (k > 1)
+    {
+      double a = (k - 1) / (2.0 * kld_err);
+      double b = 2.0 / (9.0 * (k - 1));
+      double c = 1.0 - b + std::sqrt(b) * kld_z;
+      Mx = a * c * c * c;
+    }
+
+    // Never exceed max particles
+    if (resampled.size() >= max_particles_)
+    {
+      break;
+    }
   }
 
   particles_ = resampled;
+  weights_ = resampled_weights;
 
   updateStatistics();
 }

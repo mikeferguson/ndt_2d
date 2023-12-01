@@ -10,6 +10,7 @@
 #include <memory>
 #include <vector>
 #include <geometry_msgs/msg/pose_array.hpp>
+#include <ndt_2d/kd_tree.hpp>
 #include <ndt_2d/motion_model.hpp>
 #include <ndt_2d/ndt_model.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -54,8 +55,10 @@ public:
 
   /**
    * @brief Resample particles, according to the current weights.
+   * @param kld_err Maximum error between true distribution and estimated distribution.
+   * @param kld_z Upper quantile of (1-p), p = probability that error is less than kld_err.
    */
-  void resample();
+  void resample(const double kld_err, const double kld_z);
 
   /** @brief Get the mean of the particle distribution. */
   Eigen::Vector3d getMean();
@@ -82,6 +85,9 @@ private:
   std::vector<double> weights_;
   Eigen::Vector3d mean_;
   Eigen::Matrix3d cov_;
+
+  // KD Tree for adaptive resampling
+  KDTree<double> kd_tree_;
 };
 
 }  // namespace ndt_2d

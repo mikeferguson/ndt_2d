@@ -21,6 +21,33 @@ Eigen::Vector3d getMean(std::vector<Eigen::Vector3d>& poses)
   return (mean / poses.size());
 }
 
+TEST(ParticleTests, test_kd_tree)
+{
+  ndt_2d::KDTree<double> tree(0.5, 0.5, 0.25, 1 /* try to force re-alloc*/);
+  EXPECT_EQ(0, tree.getLeafCount());
+
+  Eigen::Vector3d pose(0.0, 0.0, 0.0);
+  double weight = 1.0;
+  tree.insert(pose, weight);
+  EXPECT_EQ(1, tree.getLeafCount());
+
+  tree.insert(pose, weight);
+  EXPECT_EQ(1, tree.getLeafCount());
+
+  pose(0) = 0.75;
+  tree.insert(pose, weight);
+  EXPECT_EQ(2, tree.getLeafCount());
+
+  pose(0) = -0.75;
+  tree.insert(pose, weight);
+  EXPECT_EQ(3, tree.getLeafCount());
+
+  pose(0) = 0.75;
+  pose(1) = 0.75;
+  tree.insert(pose, weight);
+  EXPECT_EQ(4, tree.getLeafCount());
+}
+
 TEST(ParticleTests, test_particle_filter)
 {
   ndt_2d::MotionModelPtr model =
@@ -131,7 +158,7 @@ TEST(ParticleTests, test_particle_filter)
   EXPECT_NEAR(mean(2), 1.57, 0.4);
 
   // Test resampling
-  filter.resample();
+  filter.resample(0.99, 0.01);
   mean = filter.getMean();
   EXPECT_NEAR(mean(0), 1.25, 0.4);
   EXPECT_NEAR(mean(1), 2.0, 0.4);

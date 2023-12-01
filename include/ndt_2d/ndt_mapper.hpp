@@ -93,6 +93,7 @@ protected:
 
   // Localization parameters
   bool use_particle_filter_;
+  double kld_err_, kld_z_;
   std::shared_ptr<ParticleFilter> filter_;
   std::shared_ptr<NDT> global_ndt_;
 

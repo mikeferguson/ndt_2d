@@ -54,6 +54,9 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
     size_t min_p = this->declare_parameter<int>("min_particles", 100);
     size_t max_p = this->declare_parameter<int>("max_particles", 500);
 
+    kld_err_ = this->declare_parameter<double>("kld_err", 0.01);
+    kld_z_ = this->declare_parameter<double>("kld_z", 0.99);
+
     filter_ = std::make_shared<ParticleFilter>(min_p, max_p, model);
   }
 
@@ -348,7 +351,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
     filter_->update(robot_delta(0), robot_delta(1), robot_delta(2));
     filter_->measure(global_ndt_, scan);
-    filter_->resample();
+    filter_->resample(kld_err_, kld_z_);
 
     auto mean = filter_->getMean();
     scan->pose.x = mean(0);
