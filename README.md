@@ -21,10 +21,77 @@ and localization.
 
 ## Parameter Details
 
+ * ``enable_mapping``: When set, mapping is disabled. A global NDT will
+   be built from the loaded map.
+
+ * ``global_search_size``: The maximum distance between two scans to
+   be considered for global loop closure.
+
+ * ``laser_max_beams``: Maximum number of laser beams to use during scan
+   matching. This mirrors the parameter of the same name in AMCL.
+
+ * ``ndt_resolution``: Resolution used for the NDT grid. Every cell of this
+   resolution will be represented by a single Gaussian function. Units: meters.
+
+ * ``minimum_travel_distance``: Minimum linear travel distance before
+   localization update is applied. Applies to both particle filter and
+   scan matching based localization. Units: meters.
+
+ * ``minimum_travel_rotation``: Minimum angular travel before
+   localization update is applied. Applies to both particle filter and
+   scan matching based localization. Units: radians.
+
  * ``map_file``: If this set, this resource will be loaded as an initial
    map. This works for both continuing to map OR localization. Robot
    must be localized with the initial pose tool.
- * ``enable_mapping``: When set, mapping is disabled. A global NDT will
-   be built from the loaded map.
+
+ * ``odom_frame``: TF frame_id for the odometry. Usually ``odom``.
+
+ * ``resolution``: Resolution of the published occupancy grid map. This is
+   entirely independent of the underlying resolution of the NDT. Units: meters.
+
+ * ``robot_frame``: TF frame_id for the robot. Usually ``base_link``.
+
+ * ``rolling_depth``: When building a map, this is how many scans to use
+   when building the local NDT for scan matching.
+
+ * ``search_angular_resolution``: Angular resolution to use for the scan
+   matching search. Units: radians.
+
+ * ``search_angular_size``: Search will be conducted from ``-search_angular_size``
+   to ``search_angular_size``, centered around the odometry heading. Units: radians.
+
+ * ``search_linear_resolution``: Linear resolution to use for the scan
+   matching search in X/Y dimensions. Units: meters.
+
+ * ``search_linear_size``: Search will be conducted from ``-search_linear_size``
+   to ``search_linear_size``, centered around the odometry pose. Units: meters.
+
  * ``use_particle_filter``: When set, mapping is disabled and a global
    NDT is created. The initial pose tool will initialize localization.
+
+## Technical Details
+
+This package implements mapping and localization using the following:
+
+ * The underlying representation for scan matching is the Normal
+   Distribution Transform (NDT) as described in [[1]](#1). We do
+   not implement the overlapping grids as described in section III
+   of the paper.
+
+ * The calculation of NDT cell mean and covariances is done in an
+   incremental manner modeled on [[2]](#2).
+
+ * The particle filter, motion model, and KLD resampling algorithms
+   come from the "Probabilistic Robotics" book [[3]](#3). The
+   filter does not include the recovery feature based on tracking
+   of average weights as it was unused in every AMCL configuration
+   investigated.
+
+## References
+
+<a id="1">[1]</a> Biber, Peter, and Wolfgang Straßer. "The normal distributions transform: A new approach to laser scan matching." Proceedings 2003 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS 2003)(Cat. No. 03CH37453). Vol. 3. IEEE, 2003.
+
+<a id="2">[2]</a> Saarinen, Jari, et al. "Normal distributions transform occupancy maps: Application to large-scale online 3D mapping." 2013 IEEE international conference on robotics and automation. IEEE, 2013.
+
+<a id="3">[3]</a> Thrun, Burgard and Fox. "Probabilistic Robotics". MIT Press, 2005.
