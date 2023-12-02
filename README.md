@@ -67,6 +67,9 @@ and localization.
  * ``search_linear_size``: Search will be conducted from ``-search_linear_size``
    to ``search_linear_size``, centered around the odometry pose. Units: meters.
 
+ * ``transform_timeout``: Max allowable time to wait for transform to become
+   available when transforming the laser scan. Units: seconds.
+
  * ``use_particle_filter``: When set, mapping is disabled and a global
    NDT is created. The initial pose tool will initialize localization.
 

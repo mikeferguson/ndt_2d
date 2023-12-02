@@ -39,6 +39,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   search_angular_size_ = this->declare_parameter<double>("search_angular_size", 0.1);
   search_linear_resolution_ = this->declare_parameter<double>("search_linear_resolution", 0.005);
   search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
+  transform_timeout_ = this->declare_parameter<double>("transform_timeout", 0.2);
   global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
 
   use_particle_filter_ = this->declare_parameter<bool>("use_particle_filter", false);
@@ -264,7 +265,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   odom_pose_tf.pose.orientation.w = 1.0;
   try
   {
-    tf2_buffer_->transform(odom_pose_tf, odom_pose_tf, odom_frame_);
+    tf2_buffer_->transform(odom_pose_tf, odom_pose_tf, odom_frame_,
+                           tf2::durationFromSec(transform_timeout_));
   }
   catch (const tf2::TransformException& ex)
   {
