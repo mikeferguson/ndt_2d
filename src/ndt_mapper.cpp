@@ -596,10 +596,10 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 void Mapper::publishTransform()
 {
   // prev_robot_pose_ pose gives us map -> robot
-  Eigen::Isometry3d map_to_robot = getTransform(prev_robot_pose_);
+  Eigen::Isometry3d map_to_robot = toEigen(prev_robot_pose_);
 
   // Latest odom pose gives us odom -> robot
-  Eigen::Isometry3d odom_to_robot = getTransform(prev_odom_pose_);
+  Eigen::Isometry3d odom_to_robot = toEigen(prev_odom_pose_);
 
   // Compute map -> odom
   Eigen::Isometry3d map_to_odom(map_to_robot * odom_to_robot.inverse());

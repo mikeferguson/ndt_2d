@@ -72,12 +72,6 @@ protected:
 
   // Various helpers
   ConstraintPtr makeConstraint(const ScanPtr & from, const ScanPtr & to) const;
-  inline Eigen::Isometry3d getTransform(const Pose2d & pose)
-  {
-    Eigen::Isometry3d t(Eigen::Translation3d(pose.x, pose.y, 0.0) *
-                        Eigen::AngleAxisd(pose.theta, Eigen::Vector3d::UnitZ()));
-    return t;
-  }
 
   // Mapping parameters
   double map_resolution_;
