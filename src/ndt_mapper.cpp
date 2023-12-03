@@ -210,9 +210,9 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
 
     // Add a constraint
     Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
-    covariance(0, 0) = 0.01;
-    covariance(1, 1) = 0.01;
-    covariance(2, 2) = 0.05;
+    covariance(0, 0) = msg->pose.covariance[0];
+    covariance(1, 1) = msg->pose.covariance[7];
+    covariance(2, 2) = msg->pose.covariance[35];
     ConstraintPtr constraint = makeConstraint(graph_->scans[nearest[0]], scan, covariance);
     graph_->constraints.push_back(constraint);
   }
@@ -400,8 +400,9 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
       // Local consistency - match new scan against last 10 scans
       Pose2d correction;
+      Eigen::Matrix3d covariance;
       double uncorrected_score = ndt->likelihood(scan);
-      matchScan(ndt, scan, correction, laser_max_beams_);
+      matchScan(ndt, scan, correction, covariance, laser_max_beams_);
       double score = ndt->likelihood(scan, correction);
       RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
                   correction.x, correction.y, correction.theta, uncorrected_score, score);
@@ -410,29 +411,19 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       scan->pose.x += correction.x;
       scan->pose.y += correction.y;
       scan->pose.theta += correction.theta;
+
+      // Add odom constraint to the graph
+      ConstraintPtr constraint = makeConstraint(graph_->scans.back(), scan, covariance);
+      graph_->constraints.push_back(constraint);
     }
 
     RCLCPP_INFO(logger_, "Corrected: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
 
-    // TODO(fergs): lock this when timer is converted to thread
-    {
-      // Add odom constraint to the graph
-      if (!graph_->scans.empty())
-      {
-        Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
-        covariance(0, 0) = 0.01;
-        covariance(1, 1) = 0.01;
-        covariance(2, 2) = 0.05;
-        ConstraintPtr constraint = makeConstraint(graph_->scans.back(), scan, covariance);
-        graph_->constraints.push_back(constraint);
-      }
-
-      // Append new scan to our graph
-      graph_->scans.push_back(scan);
-      prev_odom_pose_ = odom_pose;
-      prev_robot_pose_ = scan->pose;
-      map_update_available_ = true;
-    }
+    // Append new scan to our graph
+    graph_->scans.push_back(scan);
+    prev_odom_pose_ = odom_pose;
+    prev_robot_pose_ = scan->pose;
+    map_update_available_ = true;
 
     // Global consistency - search scans for global matches
     searchGlobalMatches(scan);
@@ -441,8 +432,9 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   {
     // Not using particle filter, nor mapping, just track motion of robot
     Pose2d correction;
+    Eigen::Matrix3d covariance;
     double uncorrected_score = global_ndt_->likelihood(scan);
-    matchScan(global_ndt_, scan, correction, laser_max_beams_);
+    matchScan(global_ndt_, scan, correction, covariance, laser_max_beams_);
     double score = global_ndt_->likelihood(scan, correction);
     RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
                 correction.x, correction.y, correction.theta, uncorrected_score, score);
@@ -486,10 +478,16 @@ void Mapper::buildNDT(const std::vector<ScanPtr>::const_iterator& begin,
 
 double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
                          const ScanPtr & scan, Pose2d & pose,
+                         Eigen::Matrix3d & covariance,
                          size_t scan_points_to_use)
 {
   // Search NDT for best correlation for new scan
   double best_score = 0;
+
+  // Working values for covariance computation
+  Eigen::Matrix3d k = Eigen::Matrix3d::Zero();
+  Eigen::Vector3d u = Eigen::Vector3d::Zero();
+  double s = 0.0;
 
   // Subsample the scan
   scan_points_to_use = std::min(scan_points_to_use, scan->points.size());
@@ -538,9 +536,18 @@ double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
           pose.y = dy;
           pose.theta = dth;
         }
+
+        // Covariance computation
+        Eigen::Vector3d x(dx, dy, dth);
+        k += x * x.transpose() * likelihood;
+        u += x * likelihood;
+        s += likelihood;
       }
     }
   }
+
+  // Compute covariance
+  covariance = (1 / s) * k + (1 / (s * s) * u * u.transpose());
 
   return best_score;
 }
@@ -577,7 +584,8 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 
     // Try to match scans
     Pose2d correction;
-    matchScan(ndt, scan, correction, laser_max_beams_);
+    Eigen::Matrix3d covariance;
+    matchScan(ndt, scan, correction, covariance, laser_max_beams_);
     double score = -ndt->likelihood(scan, correction);
 
     if (score < uncorrected_score)
@@ -591,10 +599,6 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
       scan->pose.theta += correction.theta;
 
       // Add constraint to the graph
-      Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
-      covariance(0, 0) = 0.01;
-      covariance(1, 1) = 0.01;
-      covariance(2, 2) = 0.05;
       ConstraintPtr constraint = makeConstraint(candidate, scan, covariance);
       constraint->switchable = true;
       graph_->constraints.push_back(constraint);

@@ -58,11 +58,13 @@ protected:
    * @param ndt Map to match scan against.
    * @param scan Scan to match against NDT map.
    * @param pose The corrected pose that best matches scan to NDT map.
+   * @param covariance Covariance matrix for the match.
    * @param scan_points_to_use Number of points to match from the scan.
    * @returns The likelihood score when scan is at corrected pose.
    */
   double matchScan(const std::shared_ptr<NDT> & ndt,
                    const ScanPtr & scan, Pose2d & pose,
+                   Eigen::Matrix3d & covariance,
                    size_t scan_points_to_use);
 
   void searchGlobalMatches(ScanPtr & scan);

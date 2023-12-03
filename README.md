@@ -80,13 +80,14 @@ This package implements mapping and localization using the following:
  * The underlying representation for scan matching is the Normal
    Distribution Transform (NDT) as described in [[1]](#1). We do
    not implement the overlapping grids as described in section III
-   of the paper.
+   of the paper. The covariance computation when doing scan matching
+   is based on [[2]](#2).
 
  * The calculation of NDT cell mean and covariances is done in an
-   incremental manner modeled on [[2]](#2).
+   incremental manner modeled on [[3]](#3).
 
  * The particle filter, motion model, and KLD resampling algorithms
-   come from the "Probabilistic Robotics" book [[3]](#3). The
+   come from the "Probabilistic Robotics" book [[4]](#4). The
    filter does not include the recovery feature based on tracking
    of average weights as it was unused in every AMCL configuration
    investigated.
@@ -95,6 +96,8 @@ This package implements mapping and localization using the following:
 
 <a id="1">[1]</a> Biber, Peter, and Wolfgang Straßer. "The normal distributions transform: A new approach to laser scan matching." Proceedings 2003 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS 2003)(Cat. No. 03CH37453). Vol. 3. IEEE, 2003.
 
-<a id="2">[2]</a> Saarinen, Jari, et al. "Normal distributions transform occupancy maps: Application to large-scale online 3D mapping." 2013 IEEE international conference on robotics and automation. IEEE, 2013.
+<a id="2">[2]</a> Olson, Edwin B. "Real-time correlative scan matching." 2009 IEEE International Conference on Robotics and Automation. IEEE, 2009.
 
-<a id="3">[3]</a> Thrun, Burgard and Fox. "Probabilistic Robotics". MIT Press, 2005.
+<a id="3">[3]</a> Saarinen, Jari, et al. "Normal distributions transform occupancy maps: Application to large-scale online 3D mapping." 2013 IEEE international conference on robotics and automation. IEEE, 2013.
+
+<a id="4">[4]</a> Thrun, Burgard and Fox. "Probabilistic Robotics". MIT Press, 2005.
