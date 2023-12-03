@@ -85,6 +85,7 @@ protected:
   double minimum_travel_distance_, minimum_travel_rotation_;
   size_t rolling_depth_;
   std::string odom_frame_, robot_frame_, laser_frame_;
+  bool laser_inverted_;
   size_t laser_max_beams_;
   double search_angular_resolution_, search_angular_size_;
   double search_linear_resolution_, search_linear_size_;

@@ -24,6 +24,7 @@ namespace ndt_2d
 Mapper::Mapper(const rclcpp::NodeOptions & options)
 : rclcpp::Node("ndt_2d_mapper", options),
   map_update_available_(false),
+  laser_inverted_(false),
   logger_(rclcpp::get_logger("ndt_2d_mapper")),
   prev_odom_pose_is_initialized_(true)
 {
@@ -233,6 +234,12 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       // Determine pose of laser relative to base
       auto t = tf2_buffer_->lookupTransform(robot_frame_, msg->header.frame_id, tf2::TimePointZero);
       laser_transform_ = fromMsg(t);
+      if (std::fabs(t.transform.rotation.x) > 0.02 ||
+          std::fabs(t.transform.rotation.y) > 0.02)
+      {
+        RCLCPP_WARN(logger_, "Treating laser as inverted");
+        laser_inverted_ = true;
+      }
       RCLCPP_INFO(logger_, "Robot -> laser transform: %f, %f, %f",
                            laser_transform_.x, laser_transform_.y, laser_transform_.theta);
     }
@@ -323,7 +330,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     // Filter out NANs and scans beyond max range
     if (std::isnan(msg->ranges[i]) || msg->ranges[i] > range_max_) continue;
     // Project point in laser frame
-    double angle = msg->angle_min + i * msg->angle_increment;
+    double angle = (msg->angle_min + i * msg->angle_increment);
+    if (laser_inverted_) angle *= -1.0;
     Point lp(cos(angle) * msg->ranges[i],
              sin(angle) * msg->ranges[i]);
     // Transform to robot frame
