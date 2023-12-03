@@ -53,6 +53,7 @@ set(dependencies
 # Primary library
 add_library(ndt_2d_lib SHARED
   src/ceres_solver.cpp
+  src/constraint.cpp
   src/graph.cpp
   src/motion_model.cpp
   src/ndt_model.cpp

@@ -209,7 +209,11 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
     graph_->scans.push_back(scan);
 
     // Add a constraint
-    ConstraintPtr constraint = makeConstraint(graph_->scans[nearest[0]], scan);
+    Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
+    covariance(0, 0) = 0.01;
+    covariance(1, 1) = 0.01;
+    covariance(2, 2) = 0.05;
+    ConstraintPtr constraint = makeConstraint(graph_->scans[nearest[0]], scan, covariance);
     graph_->constraints.push_back(constraint);
   }
 
@@ -415,7 +419,11 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       // Add odom constraint to the graph
       if (!graph_->scans.empty())
       {
-        ConstraintPtr constraint = makeConstraint(graph_->scans.back(), scan);
+        Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
+        covariance(0, 0) = 0.01;
+        covariance(1, 1) = 0.01;
+        covariance(2, 2) = 0.05;
+        ConstraintPtr constraint = makeConstraint(graph_->scans.back(), scan, covariance);
         graph_->constraints.push_back(constraint);
       }
 
@@ -583,7 +591,11 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
       scan->pose.theta += correction.theta;
 
       // Add constraint to the graph
-      ConstraintPtr constraint = makeConstraint(candidate, scan);
+      Eigen::Matrix3d covariance = Eigen::Matrix3d::Zero();
+      covariance(0, 0) = 0.01;
+      covariance(1, 1) = 0.01;
+      covariance(2, 2) = 0.05;
+      ConstraintPtr constraint = makeConstraint(candidate, scan, covariance);
       constraint->switchable = true;
       graph_->constraints.push_back(constraint);
 
@@ -643,29 +655,6 @@ void Mapper::mapPublishCallback()
 
   // Publish TF
   publishTransform();
-}
-
-ConstraintPtr Mapper::makeConstraint(const ScanPtr & from, const ScanPtr & to) const
-{
-  ConstraintPtr constraint = std::make_shared<Constraint>();
-  constraint->begin = from->id;
-  constraint->end = to->id;
-  // Get the delta in map coordinates
-  double dx = to->pose.x - from->pose.x;
-  double dy = to->pose.y - from->pose.y;
-  // Convert dx/dy into the coordinate frame of begin->pose
-  double costh = cos(from->pose.theta);
-  double sinth = sin(from->pose.theta);
-  constraint->transform(0) = costh * dx + sinth * dy;
-  constraint->transform(1) = -sinth * dx + costh * dy;
-  constraint->transform(2) = to->pose.theta - from->pose.theta;
-  // TODO(fergs): add proper information matrix
-  constraint->information(0, 0) = 100.0;
-  constraint->information(1, 1) = 100.0;
-  constraint->information(2, 2) = 20.0;
-  // Default is not switchable
-  constraint->switchable = false;
-  return constraint;
 }
 
 }  // namespace ndt_2d

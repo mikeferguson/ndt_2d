@@ -70,9 +70,6 @@ protected:
   void mapPublishCallback();
   bool map_update_available_;
 
-  // Various helpers
-  ConstraintPtr makeConstraint(const ScanPtr & from, const ScanPtr & to) const;
-
   // Mapping parameters
   double map_resolution_;
   double ndt_resolution_;

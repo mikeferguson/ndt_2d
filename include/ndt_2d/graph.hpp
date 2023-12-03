@@ -11,24 +11,13 @@
 #include <vector>
 #include <string>
 #include <nanoflann.hpp>
+#include <ndt_2d/constraint.hpp>
 #include <ndt_2d/ndt_model.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
 namespace ndt_2d
 {
-
-struct Constraint
-{
-  size_t begin;
-  size_t end;
-  // dx, dy, dtheta between begin and end poses
-  Eigen::Vector3d transform;
-  Eigen::Matrix3d information;
-  // Can this constraint be disabled?
-  bool switchable;
-};
-typedef std::shared_ptr<Constraint> ConstraintPtr;
 
 class Graph
 {
