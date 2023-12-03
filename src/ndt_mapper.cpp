@@ -64,7 +64,6 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
 
   enable_mapping_ = this->declare_parameter<bool>("enable_mapping", true);
 
-  // TODO(fergs): Load ROS params for solver
   solver_ = std::make_shared<CeresSolver>();
 
   // Negative value indicates that we should use the sensor max range
@@ -211,7 +210,7 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
 
     // Add a constraint
     ConstraintPtr constraint = makeConstraint(graph_->scans[nearest[0]], scan);
-    graph_->loop_constraints.push_back(constraint);
+    graph_->constraints.push_back(constraint);
   }
 
   // Localize robot
@@ -417,7 +416,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       if (!graph_->scans.empty())
       {
         ConstraintPtr constraint = makeConstraint(graph_->scans.back(), scan);
-        graph_->odom_constraints.push_back(constraint);
+        graph_->constraints.push_back(constraint);
       }
 
       // Append new scan to our graph
@@ -585,10 +584,11 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
 
       // Add constraint to the graph
       ConstraintPtr constraint = makeConstraint(candidate, scan);
-      graph_->loop_constraints.push_back(constraint);
+      constraint->switchable = true;
+      graph_->constraints.push_back(constraint);
 
       // TODO(fergs): only run this occasionally?
-      solver_->optimize(graph_->odom_constraints, graph_->loop_constraints, graph_->scans);
+      solver_->optimize(graph_->constraints, graph_->scans);
     }
   }
 }
@@ -663,6 +663,8 @@ ConstraintPtr Mapper::makeConstraint(const ScanPtr & from, const ScanPtr & to) c
   constraint->information(0, 0) = 100.0;
   constraint->information(1, 1) = 100.0;
   constraint->information(2, 2) = 20.0;
+  // Default is not switchable
+  constraint->switchable = false;
   return constraint;
 }
 

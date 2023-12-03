@@ -49,7 +49,12 @@ TEST(GraphTests, read_write_test)
     constraint->transform(0) = 1.0;
     constraint->transform(1) = 1.5;
     constraint->transform(2) = 0.0;
-    graph.odom_constraints.push_back(constraint);
+    constraint->information = Eigen::Matrix3d::Zero();
+    constraint->information(0, 0) = 100.0;
+    constraint->information(1, 1) = 100.0;
+    constraint->information(2, 2) = 20.0;
+    constraint->switchable = true;
+    graph.constraints.push_back(constraint);
 
     // Save simple graph for later testing of the load function
     graph.save(BAG_NAME);
@@ -77,8 +82,18 @@ TEST(GraphTests, read_write_test)
   EXPECT_EQ(2, new_graph.scans.size());
   EXPECT_EQ(3, new_graph.scans[0]->points.size());
   EXPECT_EQ(3, new_graph.scans[1]->points.size());
-  EXPECT_EQ(1, new_graph.odom_constraints.size());
-  EXPECT_EQ(0, new_graph.loop_constraints.size());
+  EXPECT_EQ(1, new_graph.constraints.size());
+
+  // Verify constraint save/load
+  EXPECT_EQ(0, new_graph.constraints[0]->begin);
+  EXPECT_EQ(1, new_graph.constraints[0]->end);
+  EXPECT_EQ(1.0, new_graph.constraints[0]->transform(0));
+  EXPECT_EQ(1.5, new_graph.constraints[0]->transform(1));
+  EXPECT_EQ(0.0, new_graph.constraints[0]->transform(2));
+  EXPECT_EQ(100.0, new_graph.constraints[0]->information(0, 0));
+  EXPECT_EQ(100.0, new_graph.constraints[0]->information(1, 1));
+  EXPECT_EQ(20.0, new_graph.constraints[0]->information(2, 2));
+  EXPECT_EQ(true, new_graph.constraints[0]->switchable);
 }
 
 int main(int argc, char** argv)

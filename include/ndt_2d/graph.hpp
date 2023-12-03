@@ -6,6 +6,7 @@
 #ifndef NDT_2D__GRAPH_HPP_
 #define NDT_2D__GRAPH_HPP_
 
+#include <Eigen/Core>
 #include <memory>
 #include <vector>
 #include <string>
@@ -16,6 +17,18 @@
 
 namespace ndt_2d
 {
+
+struct Constraint
+{
+  size_t begin;
+  size_t end;
+  // dx, dy, dtheta between begin and end poses
+  Eigen::Vector3d transform;
+  Eigen::Matrix3d information;
+  // Can this constraint be disabled?
+  bool switchable;
+};
+typedef std::shared_ptr<Constraint> ConstraintPtr;
 
 class Graph
 {
@@ -53,10 +66,8 @@ public:
 
   // Vector of scans used to build the map
   std::vector<ScanPtr> scans;
-  // Odometry constraints between consecutive scans
-  std::vector<ConstraintPtr> odom_constraints;
-  // Loop closure constraints between scans
-  std::vector<ConstraintPtr> loop_constraints;
+  // Constraints between scans
+  std::vector<ConstraintPtr> constraints;
 
 private:
   // Support for nanoflann

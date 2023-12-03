@@ -10,8 +10,7 @@
 namespace ndt_2d
 {
 CeresSolver::CeresSolver()
-: num_odom_constraints_(0),
-  num_loop_constraints_(0),
+: num_constraints_(0),
   verbose_(false)
 {
   options_.max_num_iterations = 100;
@@ -25,8 +24,7 @@ void CeresSolver::setVerbose(bool verbose)
   verbose_ = verbose;
 }
 
-bool CeresSolver::optimize(const std::vector<ConstraintPtr> & odom_constraints,
-                           const std::vector<ConstraintPtr> & loop_constraints,
+bool CeresSolver::optimize(const std::vector<ConstraintPtr> & constraints,
                            std::vector<ScanPtr> & scans)
 {
   if (scans.empty())
@@ -56,21 +54,13 @@ bool CeresSolver::optimize(const std::vector<ConstraintPtr> & odom_constraints,
     }
   }
 
-  // Add new odom constraints to the problem
-  size_t num_constraints = odom_constraints.size();
-  for (size_t i = num_odom_constraints_; i < num_constraints; ++i)
+  // Add new constraints to the problem
+  size_t n = constraints.size();
+  for (size_t i = num_constraints_; i < n; ++i)
   {
-    addConstraint(odom_constraints[i], scans);
+    addConstraint(constraints[i], scans);
   }
-  num_odom_constraints_ = num_constraints;
-
-  // Add new loop constraints to the problem
-  num_constraints = loop_constraints.size();
-  for (size_t i = num_loop_constraints_; i < num_constraints; ++i)
-  {
-    addConstraint(loop_constraints[i], scans);
-  }
-  num_loop_constraints_ = num_constraints;
+  num_constraints_ = n;
 
   // Make first node fixed
   auto first_node_ = nodes_.find(scans[0]->id);

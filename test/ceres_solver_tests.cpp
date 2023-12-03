@@ -25,11 +25,10 @@ TEST(CeresSolverTests, test_solver)
   ndt_2d::CeresSolver solver;
 
   std::vector<ndt_2d::ScanPtr> scans;
-  std::vector<ndt_2d::ConstraintPtr> odom_constraints;
-  std::vector<ndt_2d::ConstraintPtr> loop_constraints;
+  std::vector<ndt_2d::ConstraintPtr> constraints;
 
   // Optimizer can't run without scans
-  EXPECT_FALSE(solver.optimize(odom_constraints, loop_constraints, scans));
+  EXPECT_FALSE(solver.optimize(constraints, scans));
 }
 
 int main(int argc, char** argv)

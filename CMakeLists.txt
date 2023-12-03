@@ -50,23 +50,21 @@ set(dependencies
   visualization_msgs
 )
 
-# Primary ROS-agnostic library
+# Primary library
 add_library(ndt_2d_lib SHARED
   src/ceres_solver.cpp
+  src/graph.cpp
+  src/motion_model.cpp
   src/ndt_model.cpp
+  src/occupancy_grid.cpp
+  src/particle_filter.cpp
 )
-target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES} Eigen3::Eigen)
-ament_target_dependencies(ndt_2d_lib
-  tf2_ros
-)
+target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES} Eigen3::Eigen "${cpp_typesupport_target}")
+ament_target_dependencies(ndt_2d_lib ${dependencies})
 
 # Mapping node
 add_library(ndt_2d_mapper SHARED
-  src/graph.cpp
-  src/motion_model.cpp
   src/ndt_mapper.cpp
-  src/occupancy_grid.cpp
-  src/particle_filter.cpp
 )
 ament_target_dependencies(ndt_2d_mapper ${dependencies})
 target_link_libraries(ndt_2d_mapper ndt_2d_lib "${cpp_typesupport_target}")

@@ -10,7 +10,7 @@
 #include <ceres/ceres.h>
 #include <unordered_map>
 #include <vector>
-#include <ndt_2d/ndt_model.hpp>
+#include <ndt_2d/graph.hpp>
 
 namespace ndt_2d
 {
@@ -25,11 +25,10 @@ public:
 
   /**
    * @brief Optimize the graph.
-   * @param odom_constraints Additional constraint edges.
-   * @param 
+   * @param constraints Constraint edges.
+   * @param scans Scans, which include the poses to optimize.
    */
-  bool optimize(const std::vector<ConstraintPtr> & odom_constraints,
-                const std::vector<ConstraintPtr> & loop_constraints,
+  bool optimize(const std::vector<ConstraintPtr> & constraints,
                 std::vector<ScanPtr> & scans);
 
 private:
@@ -45,8 +44,7 @@ private:
   std::unordered_map<int, Eigen::Vector3d> nodes_;
 
   // To incrementally build, track number of constraints
-  size_t num_odom_constraints_;
-  size_t num_loop_constraints_;
+  size_t num_constraints_;
 
   bool verbose_;
 };
