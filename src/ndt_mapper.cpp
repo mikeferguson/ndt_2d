@@ -388,6 +388,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     RCLCPP_INFO(logger_, "Adding scan to map");
     RCLCPP_INFO(logger_, "Odom pose: %f, %f, %f", odom_pose.x, odom_pose.y, odom_pose.theta);
 
+    double matched_score = 0.0;
     if (!graph_->scans.empty())
     {
       // Determine rolling window
@@ -403,9 +404,9 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       Eigen::Matrix3d covariance;
       double uncorrected_score = ndt->likelihood(scan);
       matchScan(ndt, scan, correction, covariance, laser_max_beams_);
-      double score = ndt->likelihood(scan, correction);
+      matched_score = ndt->likelihood(scan, correction);
       RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
-                  correction.x, correction.y, correction.theta, uncorrected_score, score);
+                  correction.x, correction.y, correction.theta, uncorrected_score, matched_score);
 
       // Add correction to scan corrected pose
       scan->pose.x += correction.x;
@@ -426,7 +427,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     map_update_available_ = true;
 
     // Global consistency - search scans for global matches
-    searchGlobalMatches(scan);
+    searchGlobalMatches(scan, matched_score);
   }
   else
   {
@@ -552,7 +553,7 @@ double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
   return best_score;
 }
 
-void Mapper::searchGlobalMatches(ScanPtr & scan)
+void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
 {
   // Can't do a global search until we have at least enough scans
   if (graph_->scans.size() <= rolling_depth_)
@@ -579,16 +580,13 @@ void Mapper::searchGlobalMatches(ScanPtr & scan)
     std::shared_ptr<NDT> ndt;
     buildNDT(begin, end, ndt);
 
-    // Compute score for scan at current pose
-    double uncorrected_score = -ndt->likelihood(scan);
-
     // Try to match scans
     Pose2d correction;
     Eigen::Matrix3d covariance;
     matchScan(ndt, scan, correction, covariance, laser_max_beams_);
-    double score = -ndt->likelihood(scan, correction);
+    double score = ndt->likelihood(scan, correction);
 
-    if (score < uncorrected_score)
+    if (score > uncorrected_score)
     {
       RCLCPP_INFO(logger_, "Adding loop closure from %lu to %lu (score %f -> %f)",
                            candidate->id, scan->id, uncorrected_score, score);

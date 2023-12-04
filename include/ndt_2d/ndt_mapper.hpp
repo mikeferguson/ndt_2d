@@ -67,7 +67,7 @@ protected:
                    Eigen::Matrix3d & covariance,
                    size_t scan_points_to_use);
 
-  void searchGlobalMatches(ScanPtr & scan);
+  void searchGlobalMatches(ScanPtr & scan, double score);
   void publishTransform();
   void mapPublishCallback();
   bool map_update_available_;
