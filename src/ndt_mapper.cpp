@@ -25,6 +25,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
 : rclcpp::Node("ndt_2d_mapper", options),
   map_update_available_(false),
   laser_inverted_(false),
+  optimization_last_(0),
   logger_(rclcpp::get_logger("ndt_2d_mapper")),
   prev_odom_pose_is_initialized_(true)
 {
@@ -42,6 +43,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
   transform_timeout_ = this->declare_parameter<double>("transform_timeout", 0.2);
   global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
+  optimization_node_limit_ = this->declare_parameter<int>("optimization_node_limit", 25);
 
   use_particle_filter_ = this->declare_parameter<bool>("use_particle_filter", false);
   if (use_particle_filter_)
@@ -601,8 +603,12 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
       constraint->switchable = true;
       graph_->constraints.push_back(constraint);
 
-      // TODO(fergs): only run this occasionally?
-      solver_->optimize(graph_->constraints, graph_->scans);
+      if (graph_->scans.size() - optimization_last_ > optimization_node_limit_)
+      {
+        RCLCPP_INFO(logger_, "Optimizing pose graph");
+        solver_->optimize(graph_->constraints, graph_->scans);
+        optimization_last_ = graph_->scans.size();
+      }
     }
   }
 }

@@ -47,6 +47,9 @@ and localization.
 
  * ``odom_frame``: TF frame_id for the odometry. Usually ``odom``.
 
+ * ``optimization_node_limit``: Minimum number of nodes that must be added
+   to the graph between runs of the graph optimizer.
+
  * ``resolution``: Resolution of the published occupancy grid map. This is
    entirely independent of the underlying resolution of the NDT. Units: meters.
 
