@@ -14,7 +14,8 @@
 namespace ndt_2d
 {
 
-Graph::Graph()
+Graph::Graph(bool use_barycenter)
+: use_barycenter_(use_barycenter)
 {
 }
 
@@ -22,7 +23,8 @@ Graph::~Graph()
 {
 }
 
-Graph::Graph(const std::string & filename)
+Graph::Graph(bool use_barycenter, const std::string & filename)
+: use_barycenter_(use_barycenter)
 {
   rosbag2_cpp::Reader reader;
   reader.open(filename);
@@ -51,6 +53,7 @@ Graph::Graph(const std::string & filename)
         scan->points[i].x = scan_msg->points[i].x;
         scan->points[i].y = scan_msg->points[i].y;
       }
+      scan->update();
       scans.push_back(scan);
     }
     else
@@ -142,12 +145,13 @@ std::vector<size_t> Graph::findNearest(const ScanPtr & scan, double dist, int li
   // Build a KD-tree from scratch each time - no sense with bookkeeping to use dynamic
   // tree, since it rebuilds index from scratch: https://github.com/jlblancoc/nanoflann/issues/90
   size_t limit = (limit_scan_index > 0) ? limit_scan_index : scans.size();
-  GraphAdapter adapter(this, limit);
+  GraphAdapter adapter(this, limit, use_barycenter_);
   kd_tree_t tree(2 /* dimension */, adapter, 5 /* leaf size */);
   tree.buildIndex();
 
   // Search KD-tree for neighbors
-  const double query[2] = {scan->pose.x, scan->pose.y};
+  const Pose2d & pose = use_barycenter_ ? scan->barycenter : scan->pose;
+  const double query[2] = {pose.x, pose.y};
   std::vector<std::pair<unsigned, double>> matches;
   nanoflann::SearchParams params;
   tree.radiusSearch(query, dist, matches, params);

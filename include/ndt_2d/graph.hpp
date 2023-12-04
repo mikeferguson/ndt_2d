@@ -25,14 +25,14 @@ public:
   /**
    * @brief Create an empty graph
    */
-  Graph();
+  explicit Graph(bool use_barycenter);
   ~Graph();
 
   /**
    * @brief Create a graph by loading from a file
    * @param filename Full path to the map file
    */
-  explicit Graph(const std::string & filename);
+  Graph(bool use_barycenter, const std::string & filename);
 
   /**
    * @brief Save all scans and constraints to a file
@@ -62,9 +62,10 @@ private:
   // Support for nanoflann
   struct GraphAdapter
   {
-    explicit GraphAdapter(Graph * graph, size_t size)
+    explicit GraphAdapter(Graph * graph, size_t size, bool use_barycenter)
     : graph_(graph),
-      size_(size)
+      size_(size),
+      use_barycenter_(use_barycenter)
     {
     }
 
@@ -72,8 +73,10 @@ private:
 
     inline double kdtree_get_pt(const size_t idx, const size_t dim) const
     {
-      if (dim == 0) return graph_->scans[idx]->pose.x;
-      else return graph_->scans[idx]->pose.y;
+      const ScanPtr & scan = graph_->scans[idx];
+      const Pose2d & pose = use_barycenter_ ? scan->barycenter : scan->pose;
+      if (dim == 0) return pose.x;
+      else return pose.y;
     }
 
     // Use the standard bounding-box computations
@@ -82,10 +85,13 @@ private:
 
     Graph * graph_;
     size_t size_;
+    bool use_barycenter_;
   };
 
   using kd_tree_t = nanoflann::KDTreeSingleIndexAdaptor<
     nanoflann::L2_Simple_Adaptor<double, GraphAdapter>, GraphAdapter, 2>;
+
+  bool use_barycenter_;
 };
 
 using GraphPtr = std::shared_ptr<Graph>;

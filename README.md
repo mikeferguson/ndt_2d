@@ -27,6 +27,9 @@ and localization.
  * ``global_search_size``: The maximum distance between two scans to
    be considered for global loop closure.
 
+ * ``global_search_limit``: The maximum number of scans to be considered
+   for global loop closure against a new scan.
+
  * ``laser_max_beams``: Maximum number of laser beams to use during scan
    matching. This mirrors the parameter of the same name in AMCL.
 
@@ -72,6 +75,9 @@ and localization.
 
  * ``transform_timeout``: Max allowable time to wait for transform to become
    available when transforming the laser scan. Units: seconds.
+
+ * ``use_barycenter``: When scan matching, should closest scans be selected
+   via the scan pose or the barycenter of the scan points.
 
  * ``use_particle_filter``: When set, mapping is disabled and a global
    NDT is created. The initial pose tool will initialize localization.

@@ -82,7 +82,9 @@ protected:
   size_t laser_max_beams_;
   double search_angular_resolution_, search_angular_size_;
   double search_linear_resolution_, search_linear_size_;
+  bool use_barycenter_;
   double global_search_size_;
+  size_t global_search_limit_;
   // How many nodes need to be added between optimization
   size_t optimization_node_limit_, optimization_last_;
   double transform_timeout_;

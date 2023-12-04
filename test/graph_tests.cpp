@@ -12,8 +12,10 @@ TEST(GraphTests, read_write_test)
   const std::string BAG_NAME = "test_graph";
   rcpputils::fs::remove_all(BAG_NAME);
 
+  bool use_barycenter = true;
+
   {
-    ndt_2d::Graph graph;
+    ndt_2d::Graph graph(use_barycenter);
 
     ndt_2d::ScanPtr scan0 = std::make_shared<ndt_2d::Scan>();
     scan0->id = 0;
@@ -29,6 +31,12 @@ TEST(GraphTests, read_write_test)
     scan0->pose.theta = 0.0;
     graph.scans.push_back(scan0);
 
+    // Check barycenter calculations
+    scan0->update();
+    EXPECT_EQ(3.0, scan0->barycenter.x);
+    EXPECT_EQ((10 / 3.0), scan0->barycenter.y);
+    EXPECT_EQ(0.0, scan0->barycenter.theta);
+
     ndt_2d::ScanPtr scan1 = std::make_shared<ndt_2d::Scan>();
     scan1->id = 1;
     scan1->points.resize(3);
@@ -42,6 +50,11 @@ TEST(GraphTests, read_write_test)
     scan1->pose.y = 2.5;
     scan1->pose.theta = 0.05;
     graph.scans.push_back(scan1);
+
+    scan1->update();
+    EXPECT_EQ(2.0, scan1->barycenter.x);
+    EXPECT_EQ((5.5 / 3.0), scan1->barycenter.y);
+    EXPECT_EQ(0.05, scan1->barycenter.theta);
 
     ndt_2d::ConstraintPtr constraint = std::make_shared<ndt_2d::Constraint>();
     constraint->begin = 0;
@@ -72,13 +85,19 @@ TEST(GraphTests, read_write_test)
     scan2->pose.y = 2.3;
     scan2->pose.theta = 0.05;
 
+    scan2->update();
+    EXPECT_EQ(2.0, scan2->barycenter.x);
+    EXPECT_EQ((5.5 / 3.0), scan2->barycenter.y);
+    EXPECT_EQ(0.05, scan2->barycenter.theta);
+
     std::vector<size_t> near = graph.findNearest(scan2);
     EXPECT_EQ(2, near.size());
     EXPECT_EQ(1, near[0]);
     EXPECT_EQ(0, near[1]);
   }
 
-  ndt_2d::Graph new_graph(BAG_NAME);
+  use_barycenter = true;
+  ndt_2d::Graph new_graph(use_barycenter, BAG_NAME);
   EXPECT_EQ(2, new_graph.scans.size());
   EXPECT_EQ(3, new_graph.scans[0]->points.size());
   EXPECT_EQ(3, new_graph.scans[1]->points.size());

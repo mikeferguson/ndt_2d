@@ -60,8 +60,31 @@ struct Scan
   size_t id;
   // Pose of scan in the "map" frame
   Pose2d pose;
+  // Barycenter of the points (computed)
+  Pose2d barycenter;
   // Points that form the laser scan
   std::vector<Point> points;
+
+  inline void update()
+  {
+    // Compute the barycenter
+    if (points.empty())
+    {
+      barycenter = pose;
+    }
+    else
+    {
+      Point center;
+      for (auto & point : points)
+      {
+        center.x += point.x;
+        center.y += point.y;
+      }
+      barycenter = pose;
+      barycenter.x = center.x / points.size();
+      barycenter.y = center.y / points.size();
+    }
+  }
 };
 typedef std::shared_ptr<Scan> ScanPtr;
 

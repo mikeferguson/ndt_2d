@@ -42,7 +42,9 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   search_linear_resolution_ = this->declare_parameter<double>("search_linear_resolution", 0.005);
   search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
   transform_timeout_ = this->declare_parameter<double>("transform_timeout", 0.2);
+  use_barycenter_ = this->declare_parameter<bool>("use_barycenter", true);
   global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
+  global_search_limit_ = this->declare_parameter<int>("global_search_limit", 3);
   optimization_node_limit_ = this->declare_parameter<int>("optimization_node_limit", 25);
 
   use_particle_filter_ = this->declare_parameter<bool>("use_particle_filter", false);
@@ -81,11 +83,11 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   std::string map_file = this->declare_parameter<std::string>("map_file", "");
   if (map_file.empty())
   {
-    graph_ = std::make_shared<Graph>();
+    graph_ = std::make_shared<Graph>(use_barycenter_);
   }
   else
   {
-    graph_ = std::make_shared<Graph>(map_file);
+    graph_ = std::make_shared<Graph>(use_barycenter_, map_file);
     prev_odom_pose_is_initialized_ = false;
     map_update_available_ = true;
   }
@@ -140,7 +142,7 @@ void Mapper::configure(const std::shared_ptr<srv::Configure::Request> request,
   if (request->action & srv::Configure::Request::LOAD_FROM_FILE)
   {
     RCLCPP_INFO(logger_, "Loading map from %s", request->filename.c_str());
-    graph_ = std::make_shared<Graph>(request->filename);
+    graph_ = std::make_shared<Graph>(use_barycenter_, request->filename);
     map_update_available_ = true;
     prev_odom_pose_is_initialized_ = false;
   }
@@ -197,9 +199,10 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
   else if (enable_mapping_)
   {
     // If mapping, connect this pose to the graph
-    ScanPtr scan(new Scan());
+    ScanPtr scan = std::make_shared<Scan>();
     scan->id = graph_->scans.size();
     scan->pose = fromMsg(msg->pose.pose);
+    scan->update();
 
     // Find the closest node in existing graph, then add scan to graph
     std::vector<size_t> nearest = graph_->findNearest(scan);
@@ -287,12 +290,9 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     return;
   }
 
-  // Need to convert the scan into an ndt_2d style
-  ScanPtr scan(new Scan());
-  scan->id = graph_->scans.size();
-
   // Convert pose to ndt_2d style
   Pose2d odom_pose = fromMsg(odom_pose_tf);
+  Pose2d robot_pose;
 
   // Make sure we have traveled far enough
   if (!graph_->scans.empty())
@@ -312,24 +312,22 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     double heading = angles::shortest_angular_distance(prev_odom_pose_.theta,
                                                        prev_robot_pose_.theta);
     // Now apply odometry delta, corrected by heading, to get initial corrected pose
-    scan->pose.x = prev_robot_pose_.x + (dx * cos(heading)) - (dy * sin(heading));
-    scan->pose.y = prev_robot_pose_.y + (dx * sin(heading)) + (dy * cos(heading));
-    scan->pose.theta = angles::normalize_angle(prev_robot_pose_.theta + dth);
+    robot_pose.x = prev_robot_pose_.x + (dx * cos(heading)) - (dy * sin(heading));
+    robot_pose.y = prev_robot_pose_.y + (dx * sin(heading)) + (dy * cos(heading));
+    robot_pose.theta = angles::normalize_angle(prev_robot_pose_.theta + dth);
   }
-  else
-  {
-    // Initialize corrected pose - start robot at origin of map
-    scan->pose.x = 0.0;
-    scan->pose.y = 0.0;
-    scan->pose.theta = 0.0;
-  }
+
+  // Need to convert the scan into an ndt_2d style
+  ScanPtr scan = std::make_shared<Scan>();
+  scan->id = graph_->scans.size();
+  scan->pose = robot_pose;
+  scan->points.reserve(msg->ranges.size());
 
   // Minor optimization
   double cos_lt = cos(laser_transform_.theta);
   double sin_lt = sin(laser_transform_.theta);
 
   // Using this scan, convert ROS msg into ndt_2d style scan
-  scan->points.reserve(msg->ranges.size());
   for (size_t i = 0; i < msg->ranges.size(); ++i)
   {
     // Filter out NANs and scans beyond max range
@@ -345,6 +343,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     // Add point to scan
     scan->points.push_back(point);
   }
+  scan->update();
 
   if (use_particle_filter_)
   {
@@ -567,6 +566,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
   size_t rolling = graph_->scans.size() - rolling_depth_;
 
   std::vector<size_t> scans = graph_->findNearest(scan, global_search_size_, rolling);
+  size_t num_scans_to_check = global_search_limit_;
   for (auto i : scans)
   {
     const auto & candidate = graph_->scans[i];
@@ -610,6 +610,8 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
         optimization_last_ = graph_->scans.size();
       }
     }
+
+    if (--num_scans_to_check == 0) break;
   }
 }
 
