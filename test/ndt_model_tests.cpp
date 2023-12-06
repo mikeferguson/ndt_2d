@@ -22,7 +22,9 @@ TEST(NdtModelTests, test_ndt_cell)
   cell.addPoint(p);
 
   // Update NDT
+  EXPECT_FALSE(cell.valid);
   cell.compute();
+  EXPECT_TRUE(cell.valid);
 
   // Mean should be correct
   EXPECT_DOUBLE_EQ(3.5, cell.mean(0));
@@ -44,33 +46,123 @@ TEST(NdtModelTests, test_ndt_cell)
   // Update NDT
   cell.compute();
 
-  EXPECT_NEAR(12.25666666, cell.covariance(0, 0), 0.001);
+  EXPECT_NEAR(0.008, cell.covariance(0, 0), 0.001);
   EXPECT_NEAR(0.0, cell.covariance(0, 1), 0.001);
-  EXPECT_NEAR(12.25125, cell.covariance(1, 1), 0.001);
+  EXPECT_NEAR(0.002, cell.covariance(1, 1), 0.001);
 
+  // Test at mean
   p(0) = 3.5;
   p(1) = 3.5;
   EXPECT_NEAR(1.0, cell.score(p), 0.001);
 
-  p(0) = 3.49;
-  p(1) = 3.49;
-  EXPECT_NEAR(1.0, cell.score(p), 0.001);
+  // One std dev away in x
+  p(0) = 3.5 + sqrt(0.008);
+  p(1) = 3.5;
+  EXPECT_NEAR(0.6065, cell.score(p), 0.001);
 
-  p(0) = 3.51;
-  p(1) = 3.49;
-  EXPECT_NEAR(1.0, cell.score(p), 0.001);
+  // Two std dev away in x
+  p(0) = 3.5 + 2 * sqrt(0.008);
+  p(1) = 3.5;
+  EXPECT_NEAR(0.1353, cell.score(p), 0.001);
 
-  p(0) = 3.4;
-  p(1) = 3.45;
-  EXPECT_NEAR(1.0, cell.score(p), 0.001);
+  // One std dev away in y
+  p(0) = 3.5;
+  p(1) = 3.5 + sqrt(0.002);
+  EXPECT_NEAR(0.6065, cell.score(p), 0.001);
 
-  p(0) = 3.1;
-  p(1) = 3.2;
-  EXPECT_NEAR(0.9834, cell.score(p), 0.001);
+  // Two std dev away in y
+  p(0) = 3.5;
+  p(1) = 3.5 + 2 * sqrt(0.002);
+  EXPECT_NEAR(0.1353, cell.score(p), 0.001);
 
+  // Really far away
   p(0) = 0.0;
   p(1) = 0.0;
-  EXPECT_NEAR(0.202, cell.score(p), 0.001);
+  EXPECT_NEAR(0.0, cell.score(p), 0.001);
+}
+
+TEST(NdtModelTests, test_ndt_cell_no_x_variation)
+{
+  ndt_2d::Cell cell;
+
+  // Add points to NDT cell
+  Eigen::Vector2d p(3.5, 3.5);
+  cell.addPoint(p);
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(0, 0));
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(0, 1));
+  EXPECT_DOUBLE_EQ(0.0, cell.correlation(1, 0));
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(1, 1));
+
+  p(1) = 3.45;
+  cell.addPoint(p);
+  cell.addPoint(p);
+
+  p(1) = 3.55;
+  cell.addPoint(p);
+  cell.addPoint(p);
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(0, 0));
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(0, 1));
+  EXPECT_DOUBLE_EQ(0.0, cell.correlation(1, 0));
+  EXPECT_DOUBLE_EQ(12.252, cell.correlation(1, 1));
+
+  // Update NDT
+  cell.compute();
+
+  // Mean should be correct
+  EXPECT_DOUBLE_EQ(3.5, cell.mean(0));
+  EXPECT_DOUBLE_EQ(3.5, cell.mean(1));
+
+  // Check internal matrice are correct
+  EXPECT_DOUBLE_EQ(0.0, cell.covariance(0, 0));
+  EXPECT_DOUBLE_EQ(0.0, cell.covariance(1, 0));
+  EXPECT_DOUBLE_EQ(0.0, cell.covariance(0, 1));
+  EXPECT_NEAR(0.0025, cell.covariance(1, 1), 0.000001);
+  EXPECT_NEAR(400000.0, cell.information(0, 0), 0.000001);
+  EXPECT_DOUBLE_EQ(0.0, cell.information(1, 0));
+  EXPECT_DOUBLE_EQ(0.0, cell.information(0, 1));
+  EXPECT_DOUBLE_EQ(0.0, cell.information(1, 1));
+}
+
+TEST(NdtModelTests, test_ndt_cell_no_y_variation)
+{
+  ndt_2d::Cell cell;
+
+  // Add points to NDT cell
+  Eigen::Vector2d p(3.5, 3.5);
+  cell.addPoint(p);
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(0, 0));
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(0, 1));
+  EXPECT_DOUBLE_EQ(0.0, cell.correlation(1, 0));
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(1, 1));
+
+  p(0) = 3.45;
+  cell.addPoint(p);
+  cell.addPoint(p);
+
+  p(0) = 3.55;
+  cell.addPoint(p);
+  cell.addPoint(p);
+  EXPECT_DOUBLE_EQ(12.252, cell.correlation(0, 0));
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(0, 1));
+  EXPECT_DOUBLE_EQ(0.0, cell.correlation(1, 0));
+  EXPECT_DOUBLE_EQ(12.25, cell.correlation(1, 1));
+
+  // Update NDT
+  cell.compute();
+
+  // Mean should be correct
+  EXPECT_DOUBLE_EQ(3.5, cell.mean(0));
+  EXPECT_DOUBLE_EQ(3.5, cell.mean(1));
+
+  // Check internal matrice are correct
+  EXPECT_NEAR(0.0025, cell.covariance(0, 0), 0.000001);
+  EXPECT_DOUBLE_EQ(0.0, cell.covariance(1, 0));
+  EXPECT_DOUBLE_EQ(0.0, cell.covariance(0, 1));
+  EXPECT_DOUBLE_EQ(0.0, cell.covariance(1, 1));
+  EXPECT_DOUBLE_EQ(0.0, cell.information(0, 0));
+  EXPECT_DOUBLE_EQ(0.0, cell.information(1, 0));
+  EXPECT_DOUBLE_EQ(0.0, cell.information(0, 1));
+  EXPECT_NEAR(400000.0, cell.information(1, 1), 0.000001);
 }
 
 TEST(NdtModelTests, test_ndt)
@@ -110,7 +202,7 @@ TEST(NdtModelTests, test_ndt)
 
   // Test scoring
   double score = ndt.likelihood(points);
-  EXPECT_NEAR(0.99996, score, 0.001);
+  EXPECT_NEAR(0.7659, score, 0.001);
 }
 
 int main(int argc, char** argv)

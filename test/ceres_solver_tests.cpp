@@ -6,20 +6,6 @@
 #include <ndt_2d/ceres_solver.hpp>
 #include <gtest/gtest.h>
 
-TEST(CeresSolverTests, information_matrix_tests)
-{
-  Eigen::Matrix3d covariance;
-  covariance(0, 0) = 0.001;
-  covariance(1, 1) = 0.001;
-  covariance(2, 2) = 0.005;
-
-  Eigen::Matrix3d info = covariance.inverse();
-
-  EXPECT_DOUBLE_EQ(1000, info(0, 0));
-  EXPECT_DOUBLE_EQ(1000, info(1, 1));
-  EXPECT_DOUBLE_EQ(200,  info(2, 2));
-}
-
 TEST(CeresSolverTests, test_solver)
 {
   ndt_2d::CeresSolver solver;

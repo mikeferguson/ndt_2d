@@ -5,6 +5,7 @@
 
 #include <Eigen/Core>
 #include <Eigen/Eigen>
+#include <Eigen/Eigenvalues>
 
 #include <cmath>
 #include <ndt_2d/conversions.hpp>
@@ -49,16 +50,32 @@ void Cell::compute()
   const double scale = n / (n - 1);
   for (size_t i = 0; i < 2; ++i)
   {
-    for (size_t j = 0; j < 2; ++j)
+    for (size_t j = i; j < 2; ++j)
     {
       covariance(i, j) = (correlation(i, j) - (mean(i) * mean(j))) * scale;
-      covariance(j, i) = correlation(i, j);
+      covariance(j, i) = covariance(i, j);
     }
   }
 
-  // TODO(fergs): limit eigen values
+  // Limit the eigen values so that smaller is always at least 0.001 of larger
+  Eigen::EigenSolver<Eigen::Matrix2d> solver(covariance);
+  Eigen::Vector2d eigenvalues = solver.eigenvalues().real();
+  double small = eigenvalues(0), large = eigenvalues(1);
+  if (small > large) std::swap(small, large);
+  if (small < 0.001 * large)
+  {
+    // Special case
+    double determinant = (0.001 * large) * large;
+    information(0, 0) = covariance(1, 1) / determinant;
+    information(0, 1) = -covariance(1, 0) / determinant;
+    information(1, 0) = -covariance(0, 1) / determinant;
+    information(1, 1) = covariance(0, 0) / determinant;
+  }
+  else
+  {
+    information = covariance.inverse();
+  }
 
-  information = covariance.inverse();
   valid = true;
 }
 
