@@ -195,6 +195,9 @@ private:
   size_t size_x_, size_y_;
   double origin_x_, origin_y_;
   std::vector<Cell> cells_;
+  std::vector<Cell> cells_left_;
+  std::vector<Cell> cells_up_;
+  std::vector<Cell> cells_left_up_;
 };
 
 }  // namespace ndt_2d

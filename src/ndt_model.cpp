@@ -100,6 +100,9 @@ NDT::NDT(double cell_size, double size_x, double size_y, double origin_x, double
   origin_x_ = origin_x;
   origin_y_ = origin_y;
   cells_.resize(size_x_ * size_y_);
+  cells_left_.resize(size_x_ * size_y_);
+  cells_up_.resize(size_x_ * size_y_);
+  cells_left_up_.resize(size_x_ * size_y_);
 }
 
 NDT::~NDT()
@@ -125,6 +128,24 @@ void NDT::addScan(const ScanPtr & scan)
     {
       cells_[index].addPoint(p);
     }
+
+    index = getIndex(p(0) + cell_size_ / 2.0, p(1));
+    if (index >= 0)
+    {
+      cells_left_[index].addPoint(p);
+    }
+
+    index = getIndex(p(0), p(1) + cell_size_ / 2.0);
+    if (index >= 0)
+    {
+      cells_up_[index].addPoint(p);
+    }
+
+    index = getIndex(p(0) + cell_size_ / 2.0, p(1) + cell_size_ / 2.0);
+    if (index >= 0)
+    {
+      cells_left_up_[index].addPoint(p);
+    }
   }
 }
 
@@ -138,12 +159,32 @@ void NDT::compute()
 
 double NDT::likelihood(const Eigen::Vector2d & point)
 {
+  double score = 0.0;
   int index = getIndex(point(0), point(1));
   if (index >= 0)
   {
-    return cells_[index].score(point);
+    score += cells_[index].score(point);
   }
-  return 0.0;
+
+  index = getIndex(point(0) + cell_size_ / 2.0, point(1));
+  if (index >= 0)
+  {
+    score += cells_left_[index].score(point);
+  }
+
+  index = getIndex(point(0), point(1) + cell_size_ / 2.0);
+  if (index >= 0)
+  {
+    score += cells_up_[index].score(point);
+  }
+
+  index = getIndex(point(0) + cell_size_ / 2.0, point(1) + cell_size_ / 2.0);
+  if (index >= 0)
+  {
+    score += cells_left_up_[index].score(point);
+  }
+
+  return score / 4.0;
 }
 
 double NDT::likelihood(const Eigen::Vector3d & point)
