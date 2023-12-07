@@ -48,6 +48,14 @@ and localization.
    map. This works for both continuing to map OR localization. Robot
    must be localized with the initial pose tool.
 
+ * ``max_range``: Maximum distance of laser measurements. Measurements
+   beyond this range are discarded. Default is ``-1``, in which case the
+   max range will be extracted from the laser scan message.
+
+ * ``occupancy_threshold``: When generating the occupancy grid map, this
+   is the threshold between free and occupied space based on how many
+   raytraces have hit or passed through a given cell.
+
  * ``odom_frame``: TF frame_id for the odometry. Usually ``odom``.
 
  * ``optimization_node_limit``: Minimum number of nodes that must be added
