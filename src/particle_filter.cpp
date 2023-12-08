@@ -52,14 +52,15 @@ void ParticleFilter::update(const double dx, const double dy, const double dth)
   updateStatistics();
 }
 
-void ParticleFilter::measure(const std::shared_ptr<NDT> & ndt, const ScanPtr & scan)
+void ParticleFilter::measure(const std::shared_ptr<ScanMatcherNDT> & matcher,
+                             const ScanPtr & scan)
 {
   for (size_t i = 0; i < particles_.size(); ++i)
   {
     // Pose of this particle in NDT format
     Pose2d pose(particles_[i](0), particles_[i](1), particles_[i](2));
     // Compute the score, ignoring the scan->pose
-    weights_[i] = ndt->likelihood(scan->points, pose);
+    weights_[i] = matcher->scorePoints(scan->points, pose);
   }
   updateStatistics();
 }

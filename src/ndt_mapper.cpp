@@ -30,17 +30,12 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   prev_odom_pose_is_initialized_(true)
 {
   map_resolution_ = this->declare_parameter<double>("resolution", 0.05);
-  ndt_resolution_ = this->declare_parameter<double>("ndt_resolution", 0.25);
   minimum_travel_distance_ = this->declare_parameter<double>("minimum_travel_distance", 0.1);
   minimum_travel_rotation_ = this->declare_parameter<double>("minimum_travel_rotation", 1.0);
   rolling_depth_ = this->declare_parameter<int>("rolling_depth", 10);
   robot_frame_ = this->declare_parameter<std::string>("robot_frame", "base_link");
   odom_frame_ = this->declare_parameter<std::string>("odom_frame", "odom");
   laser_max_beams_ = this->declare_parameter<int>("laser_max_beams", 100);
-  search_angular_resolution_ = this->declare_parameter<double>("search_angular_resolution", 0.0025);
-  search_angular_size_ = this->declare_parameter<double>("search_angular_size", 0.1);
-  search_linear_resolution_ = this->declare_parameter<double>("search_linear_resolution", 0.005);
-  search_linear_size_ = this->declare_parameter<double>("search_linear_size", 0.05);
   transform_timeout_ = this->declare_parameter<double>("transform_timeout", 0.2);
   use_barycenter_ = this->declare_parameter<bool>("use_barycenter", true);
   global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
@@ -91,6 +86,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
     prev_odom_pose_is_initialized_ = false;
     map_update_available_ = true;
   }
+
   configure_srv_ = this->create_service<ndt_2d::srv::Configure>("configure",
     std::bind(&Mapper::configure, this, std::placeholders::_1, std::placeholders::_2));
 
@@ -259,11 +255,16 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     }
     laser_frame_ = msg->header.frame_id;
 
-    // range_max_ must be set before building the global_ndt_
+    // range_max_ must be set before building the global scan matcher NDT
     if (use_particle_filter_ || !enable_mapping_)
     {
-      buildNDT(graph_->scans.begin(), graph_->scans.end(), global_ndt_);
+      global_scan_matcher_ = std::make_shared<ScanMatcherNDT>(this);
+      global_scan_matcher_->setRangeMax(range_max_);
+      global_scan_matcher_->addScans(graph_->scans.begin(), graph_->scans.end());
     }
+
+    local_scan_matcher_ = std::make_shared<ScanMatcherNDT>(this);
+    local_scan_matcher_->setRangeMax(range_max_);
   }
 
   // If we have loaded a previous map, need to localize first
@@ -364,7 +365,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
                          robot_delta(1), robot_delta(2));
 
     filter_->update(robot_delta(0), robot_delta(1), robot_delta(2));
-    filter_->measure(global_ndt_, scan);
+    filter_->measure(global_scan_matcher_, scan);
     filter_->resample(kld_err_, kld_z_);
 
     auto mean = filter_->getMean();
@@ -396,17 +397,17 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       size_t start = (graph_->scans.size() <= rolling_depth_) ? 0 : graph_->scans.size() - 10;
       auto rolling = graph_->scans.begin() + start;
 
-      // Build NDT of rolling window scans
-      std::shared_ptr<NDT> ndt;
-      buildNDT(rolling, graph_->scans.end(), ndt);
+      // Create scan matcher with rolling window scans
+      local_scan_matcher_->reset();
+      local_scan_matcher_->addScans(rolling, graph_->scans.end());
 
       // Local consistency - match new scan against last 10 scans
       Pose2d correction;
       Eigen::Matrix3d covariance;
-      double uncorrected_score = ndt->likelihood(scan);
-      matchScan(ndt, scan, correction, covariance, laser_max_beams_);
-      matched_score = ndt->likelihood(scan, correction);
-      RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
+      double uncorrected_score = local_scan_matcher_->scoreScan(scan);
+      local_scan_matcher_->matchScan(scan, correction, covariance, laser_max_beams_);
+      matched_score = local_scan_matcher_->scoreScan(scan, correction);
+      RCLCPP_INFO(logger_, "           %f, %f, %f (%f -> %f)",
                   correction.x, correction.y, correction.theta, uncorrected_score, matched_score);
 
       // Add correction to scan corrected pose
@@ -435,10 +436,10 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     // Not using particle filter, nor mapping, just track motion of robot
     Pose2d correction;
     Eigen::Matrix3d covariance;
-    double uncorrected_score = global_ndt_->likelihood(scan);
-    matchScan(global_ndt_, scan, correction, covariance, laser_max_beams_);
-    double score = global_ndt_->likelihood(scan, correction);
-    RCLCPP_INFO(logger_, "           %f, %f, %f (%f | %f)",
+    double uncorrected_score = global_scan_matcher_->scoreScan(scan);
+    global_scan_matcher_->matchScan(scan, correction, covariance, laser_max_beams_);
+    double score = global_scan_matcher_->scoreScan(scan, correction);
+    RCLCPP_INFO(logger_, "           %f, %f, %f (%f -> %f)",
                 correction.x, correction.y, correction.theta, uncorrected_score, score);
 
     // Add correction to scan corrected pose
@@ -449,109 +450,6 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     prev_odom_pose_ = odom_pose;
     prev_robot_pose_ = scan->pose;
   }
-}
-
-void Mapper::buildNDT(const std::vector<ScanPtr>::const_iterator& begin,
-                      const std::vector<ScanPtr>::const_iterator& end,
-                      std::shared_ptr<NDT> & ndt)
-{
-  // Compute bounding box required
-  double min_x_ = std::numeric_limits<double>::max();
-  double max_x_ = std::numeric_limits<double>::min();
-  double min_y_ = std::numeric_limits<double>::max();
-  double max_y_ = std::numeric_limits<double>::min();
-  for (auto scan = begin; scan != end; ++scan)
-  {
-    min_x_ = std::min((*scan)->pose.x - range_max_, min_x_);
-    max_x_ = std::max((*scan)->pose.x + range_max_, max_x_);
-    min_y_ = std::min((*scan)->pose.y - range_max_, min_y_);
-    max_y_ = std::max((*scan)->pose.y + range_max_, max_y_);
-  }
-
-  ndt = std::make_shared<NDT>(ndt_resolution_,
-                              (max_x_ - min_x_), (max_y_ - min_y_), min_x_, min_y_);
-  for (auto scan = begin; scan != end; ++scan)
-  {
-    ndt->addScan(*scan);
-  }
-
-  ndt->compute();
-}
-
-double Mapper::matchScan(const std::shared_ptr<NDT> & ndt,
-                         const ScanPtr & scan, Pose2d & pose,
-                         Eigen::Matrix3d & covariance,
-                         size_t scan_points_to_use)
-{
-  // Search NDT for best correlation for new scan
-  double best_score = 0;
-
-  // Working values for covariance computation
-  Eigen::Matrix3d k = Eigen::Matrix3d::Zero();
-  Eigen::Vector3d u = Eigen::Vector3d::Zero();
-  double s = 0.0;
-
-  // Subsample the scan
-  scan_points_to_use = std::min(scan_points_to_use, scan->points.size());
-  double scan_step = static_cast<double>(scan->points.size()) / scan_points_to_use;
-
-  std::vector<Point> points_outer;
-  std::vector<Point> points_inner;
-  points_outer.resize(scan_points_to_use);
-  points_inner.resize(scan_points_to_use);
-
-  for (double dth = -search_angular_size_;
-       dth < search_angular_size_;
-       dth += search_angular_resolution_)
-  {
-    // Do orientation on the outer loop - then we can simply shift points in inner loops
-    double costh = cos(scan->pose.theta + dth);
-    double sinth = sin(scan->pose.theta + dth);
-    for (size_t i = 0; i < points_outer.size(); ++i)
-    {
-      size_t scan_idx = static_cast<size_t>(i * scan_step);
-      points_outer[i].x = scan->points[scan_idx].x * costh -
-                          scan->points[scan_idx].y * sinth + scan->pose.x;
-      points_outer[i].y = scan->points[scan_idx].x * sinth +
-                          scan->points[scan_idx].y * costh + scan->pose.y;
-    }
-
-    for (double dx = -search_linear_size_;
-         dx < search_linear_size_;
-         dx += search_linear_resolution_)
-    {
-      for (double dy = -search_linear_size_;
-           dy < search_linear_size_;
-           dy += search_linear_resolution_)
-      {
-        for (size_t i = 0; i < points_inner.size(); ++i)
-        {
-          points_inner[i].x = points_outer[i].x + dx;
-          points_inner[i].y = points_outer[i].y + dy;
-        }
-
-        double likelihood = -ndt->likelihood(points_inner);
-        if (likelihood < best_score)
-        {
-          best_score = likelihood;
-          pose.x = dx;
-          pose.y = dy;
-          pose.theta = dth;
-        }
-
-        // Covariance computation
-        Eigen::Vector3d x(dx, dy, dth);
-        k += x * x.transpose() * likelihood;
-        u += x * likelihood;
-        s += likelihood;
-      }
-    }
-  }
-
-  // Compute covariance
-  covariance = (1 / s) * k + (1 / (s * s) * u * u.transpose());
-
-  return best_score;
 }
 
 void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
@@ -579,16 +477,16 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
     auto end = graph_->scans.begin() + end_idx;
 
     // Build NDT of candidate region
-    std::shared_ptr<NDT> ndt;
-    buildNDT(begin, end, ndt);
+    local_scan_matcher_->reset();
+    local_scan_matcher_->addScans(begin, end);
 
     // Try to match scans
     Pose2d correction;
     Eigen::Matrix3d covariance;
-    matchScan(ndt, scan, correction, covariance, laser_max_beams_);
-    double score = ndt->likelihood(scan, correction);
+    local_scan_matcher_->matchScan(scan, correction, covariance, laser_max_beams_);
+    double score = local_scan_matcher_->scoreScan(scan, correction);
 
-    if (score > uncorrected_score)
+    if (score < uncorrected_score)
     {
       RCLCPP_INFO(logger_, "Adding loop closure from %lu to %lu (score %f -> %f)",
                            candidate->id, scan->id, uncorrected_score, score);

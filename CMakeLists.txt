@@ -57,6 +57,7 @@ add_library(ndt_2d_lib SHARED
   src/graph.cpp
   src/motion_model.cpp
   src/ndt_model.cpp
+  src/ndt_scan_matcher.cpp
   src/occupancy_grid.cpp
   src/particle_filter.cpp
 )

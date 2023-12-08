@@ -13,6 +13,7 @@
 #include <ndt_2d/kd_tree.hpp>
 #include <ndt_2d/motion_model.hpp>
 #include <ndt_2d/ndt_model.hpp>
+#include <ndt_2d/ndt_scan_matcher.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 namespace ndt_2d
@@ -48,10 +49,10 @@ public:
 
   /**
    * @brief Apply a measurement update.
-   * @param ndt The NDT model to compare localized scans against.
+   * @param matcher Scan localization method.
    * @param scan The current scan data.
    */
-  void measure(const std::shared_ptr<NDT> & ndt, const ScanPtr & scan);
+  void measure(const std::shared_ptr<ScanMatcherNDT> & matcher, const ScanPtr & scan);
 
   /**
    * @brief Resample particles, according to the current weights.

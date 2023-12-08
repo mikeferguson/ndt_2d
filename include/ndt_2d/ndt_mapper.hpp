@@ -11,7 +11,6 @@
 #include <tf2_ros/transform_broadcaster.h>
 #include <memory>
 #include <string>
-#include <vector>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/occupancy_grid.hpp>
@@ -19,6 +18,7 @@
 #include <ndt_2d/graph.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
 #include <ndt_2d/particle_filter.hpp>
+#include <ndt_2d/ndt_scan_matcher.hpp>
 #include <ndt_2d/srv/configure.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -43,30 +43,6 @@ protected:
   /** @brief ROS callback for new laser scan */
   void laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg);
 
-  /**
-   * @brief Build an NDT map from a set of scans.
-   * @param begin Starting iterator of scans for NDT map building.
-   * @param end Ending iterator of scans for NDT map building.
-   * @param ndt Shared pointer to the NDT map built.
-   */
-  void buildNDT(const std::vector<ScanPtr>::const_iterator & begin,
-                const std::vector<ScanPtr>::const_iterator & end,
-                std::shared_ptr<NDT> & ndt);
-
-  /**
-   * @brief Match a scan against an NDT map.
-   * @param ndt Map to match scan against.
-   * @param scan Scan to match against NDT map.
-   * @param pose The corrected pose that best matches scan to NDT map.
-   * @param covariance Covariance matrix for the match.
-   * @param scan_points_to_use Number of points to match from the scan.
-   * @returns The likelihood score when scan is at corrected pose.
-   */
-  double matchScan(const std::shared_ptr<NDT> & ndt,
-                   const ScanPtr & scan, Pose2d & pose,
-                   Eigen::Matrix3d & covariance,
-                   size_t scan_points_to_use);
-
   void searchGlobalMatches(ScanPtr & scan, double score);
   void publishTransform();
   void mapPublishCallback();
@@ -74,14 +50,11 @@ protected:
 
   // Mapping parameters
   double map_resolution_;
-  double ndt_resolution_;
   double minimum_travel_distance_, minimum_travel_rotation_;
   size_t rolling_depth_;
   std::string odom_frame_, robot_frame_, laser_frame_;
   bool laser_inverted_;
   size_t laser_max_beams_;
-  double search_angular_resolution_, search_angular_size_;
-  double search_linear_resolution_, search_linear_size_;
   bool use_barycenter_;
   double global_search_size_;
   size_t global_search_limit_;
@@ -94,7 +67,10 @@ protected:
   bool use_particle_filter_;
   double kld_err_, kld_z_;
   std::shared_ptr<ParticleFilter> filter_;
-  std::shared_ptr<NDT> global_ndt_;
+  std::shared_ptr<ScanMatcherNDT> global_scan_matcher_;
+
+  // Local scan matcher
+  std::shared_ptr<ScanMatcherNDT> local_scan_matcher_;
 
   // ROS 2 interfaces
   rclcpp::Logger logger_;
