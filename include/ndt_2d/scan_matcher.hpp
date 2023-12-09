@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <ndt_2d/ndt_model.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 namespace ndt_2d

@@ -106,6 +106,11 @@ if(BUILD_TESTING)
 endif()
 
 install(
+  DIRECTORY include/
+  DESTINATION include/${PROJECT_NAME}
+)
+
+install(
   TARGETS
     ndt_2d_lib
     ndt_2d_mapper
@@ -116,5 +121,7 @@ install(
 )
 
 pluginlib_export_plugin_description_file(ndt_2d plugins.xml)
+ament_export_include_directories(include)
+ament_export_libraries(ndt_2d_lib)
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()
