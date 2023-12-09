@@ -3,21 +3,19 @@
  * All Rights Reserved
  */
 
-#include <Eigen/Core>
-#include <ndt_2d/ndt_mapper.hpp>
 #include <ndt_2d/scan_matcher_ndt.hpp>
 
 namespace ndt_2d
 {
 
-void ScanMatcherNDT::initialize(rclcpp::Node * node, double range_max)
+void ScanMatcherNDT::initialize(const std::string & name, rclcpp::Node * node, double range_max)
 {
-  resolution_ = node->declare_parameter<double>("ndt_resolution", 0.25);
+  resolution_ = node->declare_parameter<double>(name + ".ndt_resolution", 0.25);
 
-  angular_res_ = node->declare_parameter<double>("search_angular_resolution", 0.0025);
-  angular_size_ = node->declare_parameter<double>("search_angular_size", 0.1);
-  linear_res_ = node->declare_parameter<double>("search_linear_resolution", 0.005);
-  linear_size_ = node->declare_parameter<double>("search_linear_size", 0.05);
+  angular_res_ = node->declare_parameter<double>(name + ".search_angular_resolution", 0.0025);
+  angular_size_ = node->declare_parameter<double>(name + ".search_angular_size", 0.1);
+  linear_res_ = node->declare_parameter<double>(name + ".search_linear_resolution", 0.005);
+  linear_size_ = node->declare_parameter<double>(name + ".search_linear_size", 0.05);
 
   range_max_ = range_max;
 }
@@ -144,3 +142,6 @@ void ScanMatcherNDT::reset()
 }
 
 }  // namespace ndt_2d
+
+#include <pluginlib/class_list_macros.hpp>
+PLUGINLIB_EXPORT_CLASS(ndt_2d::ScanMatcherNDT, ndt_2d::ScanMatcher)

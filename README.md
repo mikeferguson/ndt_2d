@@ -33,9 +33,6 @@ and localization.
  * ``laser_max_beams``: Maximum number of laser beams to use during scan
    matching. This mirrors the parameter of the same name in AMCL.
 
- * ``ndt_resolution``: Resolution used for the NDT grid. Every cell of this
-   resolution will be represented by a single Gaussian function. Units: meters.
-
  * ``minimum_travel_distance``: Minimum linear travel distance before
    localization update is applied. Applies to both particle filter and
    scan matching based localization. Units: meters.
@@ -69,6 +66,26 @@ and localization.
  * ``rolling_depth``: When building a map, this is how many scans to use
    when building the local NDT for scan matching.
 
+ * ``scan_matcher_type``: The plugin name for the scan matcher to use. Default
+   is ``ndt_2d::ScanMatcherNDT``.
+
+ * ``transform_timeout``: Max allowable time to wait for transform to become
+   available when transforming the laser scan. Units: seconds.
+
+ * ``use_barycenter``: When scan matching, should closest scans be selected
+   via the scan pose or the barycenter of the scan points.
+
+ * ``use_particle_filter``: When set, mapping is disabled and a global
+   NDT is created. The initial pose tool will initialize localization.
+
+## ScanMatcherNDT Parameters
+
+Each scan matcher uses the following parameters, namespaced into either
+``local_scan_matcher`` or ``global_scan_matcher`` namespaces:
+
+ * ``ndt_resolution``: Resolution used for the NDT grid. Every cell of this
+   resolution will be represented by a single Gaussian function. Units: meters.
+
  * ``search_angular_resolution``: Angular resolution to use for the scan
    matching search. Units: radians.
 
@@ -80,15 +97,6 @@ and localization.
 
  * ``search_linear_size``: Search will be conducted from ``-search_linear_size``
    to ``search_linear_size``, centered around the odometry pose. Units: meters.
-
- * ``transform_timeout``: Max allowable time to wait for transform to become
-   available when transforming the laser scan. Units: seconds.
-
- * ``use_barycenter``: When scan matching, should closest scans be selected
-   via the scan pose or the barycenter of the scan points.
-
- * ``use_particle_filter``: When set, mapping is disabled and a global
-   NDT is created. The initial pose tool will initialize localization.
 
 ## Technical Details
 

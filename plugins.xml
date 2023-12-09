@@ -1,0 +1,5 @@
+<library path="scan_matcher_ndt">
+  <class type="ndt_2d::ScanMatcherNDT" base_class_type="ndt_2d::ScanMatcher">
+    <description>Scan matcher that uses NDT.</description>
+  </class>
+</library>

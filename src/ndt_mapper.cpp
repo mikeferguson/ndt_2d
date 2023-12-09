@@ -13,7 +13,6 @@
 #include <ndt_2d/ndt_model.hpp>
 #include <ndt_2d/ndt_mapper.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
-#include <ndt_2d/scan_matcher_ndt.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
@@ -27,6 +26,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   map_update_available_(false),
   laser_inverted_(false),
   optimization_last_(0),
+  scan_matcher_loader_("ndt_2d", "ndt_2d::ScanMatcher"),
   logger_(rclcpp::get_logger("ndt_2d_mapper")),
   prev_odom_pose_is_initialized_(true)
 {
@@ -63,6 +63,8 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   }
 
   enable_mapping_ = this->declare_parameter<bool>("enable_mapping", true);
+  scan_matcher_type_ = this->declare_parameter<std::string>("scan_matcher_type",
+                                                            "ndt_2d::ScanMatcherNDT");
 
   solver_ = std::make_shared<CeresSolver>();
 
@@ -117,6 +119,9 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
 
 Mapper::~Mapper()
 {
+  // Clean these up to avoid pluginlib errors
+  local_scan_matcher_.reset();
+  global_scan_matcher_.reset();
 }
 
 void Mapper::configure(const std::shared_ptr<srv::Configure::Request> request,
@@ -259,13 +264,13 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     // range_max_ must be set before building the global scan matcher NDT
     if (use_particle_filter_ || !enable_mapping_)
     {
-      global_scan_matcher_ = std::make_shared<ScanMatcherNDT>();
-      global_scan_matcher_->initialize(this, range_max_);
+      global_scan_matcher_ = scan_matcher_loader_.createSharedInstance(scan_matcher_type_);
+      global_scan_matcher_->initialize("global_scan_matcher", this, range_max_);
       global_scan_matcher_->addScans(graph_->scans.begin(), graph_->scans.end());
     }
 
-    local_scan_matcher_ = std::make_shared<ScanMatcherNDT>();
-    local_scan_matcher_->initialize(this, range_max_);
+    local_scan_matcher_ = scan_matcher_loader_.createSharedInstance(scan_matcher_type_);
+    local_scan_matcher_->initialize("local_scan_matcher", this, range_max_);
   }
 
   // If we have loaded a previous map, need to localize first

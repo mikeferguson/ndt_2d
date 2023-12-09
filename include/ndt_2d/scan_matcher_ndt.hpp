@@ -7,6 +7,7 @@
 #define NDT_2D__SCAN_MATCHER_NDT_HPP_
 
 #include <memory>
+#include <string>
 #include <vector>
 #include <rclcpp/rclcpp.hpp>
 #include <ndt_2d/ndt_model.hpp>
@@ -22,10 +23,12 @@ public:
 
   /**
    * @brief Initialize an NDT scan matcher instance.
+   * @param name Name for ths scan matcher instance.
    * @param node Node instance to use for getting parameters.
    * @param range_max Maximum range of laser scanner.
    */
-  void initialize(rclcpp::Node * node, double range_max);
+  void initialize(const std::string & name,
+                  rclcpp::Node * node, double range_max);
 
   /**
    * @brief Add scans to the internal NDT map.

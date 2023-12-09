@@ -20,6 +20,7 @@
 #include <ndt_2d/particle_filter.hpp>
 #include <ndt_2d/scan_matcher.hpp>
 #include <ndt_2d/srv/configure.hpp>
+#include <pluginlib/class_loader.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
 
@@ -67,10 +68,12 @@ protected:
   bool use_particle_filter_;
   double kld_err_, kld_z_;
   std::shared_ptr<ParticleFilter> filter_;
-  ScanMatcherPtr global_scan_matcher_;
 
-  // Local scan matcher
+  // Scan matchers
+  ScanMatcherPtr global_scan_matcher_;
   ScanMatcherPtr local_scan_matcher_;
+  pluginlib::ClassLoader<ScanMatcher> scan_matcher_loader_;
+  std::string scan_matcher_type_;
 
   // ROS 2 interfaces
   rclcpp::Logger logger_;

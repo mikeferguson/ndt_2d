@@ -12,6 +12,7 @@ find_package(Ceres REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
@@ -40,6 +41,7 @@ set(dependencies
   angles
   geometry_msgs
   nav_msgs
+  pluginlib
   rclcpp
   rclcpp_components
   rosbag2_cpp
@@ -59,10 +61,16 @@ add_library(ndt_2d_lib SHARED
   src/ndt_model.cpp
   src/occupancy_grid.cpp
   src/particle_filter.cpp
-  src/scan_matcher_ndt.cpp
 )
 target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES} Eigen3::Eigen "${cpp_typesupport_target}")
 ament_target_dependencies(ndt_2d_lib ${dependencies})
+
+# Scan Matcher NDT Plugin
+add_library(scan_matcher_ndt SHARED
+  src/scan_matcher_ndt.cpp
+)
+target_link_libraries(scan_matcher_ndt ndt_2d_lib)
+ament_target_dependencies(scan_matcher_ndt ${dependencies})
 
 # Mapping node
 add_library(ndt_2d_mapper SHARED
@@ -101,10 +109,12 @@ install(
   TARGETS
     ndt_2d_lib
     ndt_2d_mapper
+    scan_matcher_ndt
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
 
+pluginlib_export_plugin_description_file(ndt_2d plugins.xml)
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()
