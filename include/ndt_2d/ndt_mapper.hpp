@@ -18,7 +18,7 @@
 #include <ndt_2d/graph.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
 #include <ndt_2d/particle_filter.hpp>
-#include <ndt_2d/ndt_scan_matcher.hpp>
+#include <ndt_2d/scan_matcher.hpp>
 #include <ndt_2d/srv/configure.hpp>
 #include <sensor_msgs/msg/laser_scan.hpp>
 #include <visualization_msgs/msg/marker_array.hpp>
@@ -67,10 +67,10 @@ protected:
   bool use_particle_filter_;
   double kld_err_, kld_z_;
   std::shared_ptr<ParticleFilter> filter_;
-  std::shared_ptr<ScanMatcherNDT> global_scan_matcher_;
+  ScanMatcherPtr global_scan_matcher_;
 
   // Local scan matcher
-  std::shared_ptr<ScanMatcherNDT> local_scan_matcher_;
+  ScanMatcherPtr local_scan_matcher_;
 
   // ROS 2 interfaces
   rclcpp::Logger logger_;

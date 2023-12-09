@@ -13,6 +13,7 @@
 #include <ndt_2d/ndt_model.hpp>
 #include <ndt_2d/ndt_mapper.hpp>
 #include <ndt_2d/occupancy_grid.hpp>
+#include <ndt_2d/scan_matcher_ndt.hpp>
 #include <geometry_msgs/msg/pose_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <tf2_eigen/tf2_eigen.hpp>
@@ -258,13 +259,13 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     // range_max_ must be set before building the global scan matcher NDT
     if (use_particle_filter_ || !enable_mapping_)
     {
-      global_scan_matcher_ = std::make_shared<ScanMatcherNDT>(this);
-      global_scan_matcher_->setRangeMax(range_max_);
+      global_scan_matcher_ = std::make_shared<ScanMatcherNDT>();
+      global_scan_matcher_->initialize(this, range_max_);
       global_scan_matcher_->addScans(graph_->scans.begin(), graph_->scans.end());
     }
 
-    local_scan_matcher_ = std::make_shared<ScanMatcherNDT>(this);
-    local_scan_matcher_->setRangeMax(range_max_);
+    local_scan_matcher_ = std::make_shared<ScanMatcherNDT>();
+    local_scan_matcher_->initialize(this, range_max_);
   }
 
   // If we have loaded a previous map, need to localize first

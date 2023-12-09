@@ -3,26 +3,29 @@
  * All Rights Reserved
  */
 
-#ifndef NDT_2D__NDT_SCAN_MATCHER_HPP_
-#define NDT_2D__NDT_SCAN_MATCHER_HPP_
+#ifndef NDT_2D__SCAN_MATCHER_NDT_HPP_
+#define NDT_2D__SCAN_MATCHER_NDT_HPP_
 
 #include <memory>
 #include <vector>
 #include <rclcpp/rclcpp.hpp>
 #include <ndt_2d/ndt_model.hpp>
+#include <ndt_2d/scan_matcher.hpp>
 
 namespace ndt_2d
 {
 
-class ScanMatcherNDT
+class ScanMatcherNDT : public ScanMatcher
 {
 public:
-  /**
-   * @brief Create an NDT scan matcher instance.
-   * @param node Node instance to use for getting parameters.
-   */
-  explicit ScanMatcherNDT(rclcpp::Node * node);
   virtual ~ScanMatcherNDT() = default;
+
+  /**
+   * @brief Initialize an NDT scan matcher instance.
+   * @param node Node instance to use for getting parameters.
+   * @param range_max Maximum range of laser scanner.
+   */
+  void initialize(rclcpp::Node * node, double range_max);
 
   /**
    * @brief Add scans to the internal NDT map.
@@ -69,11 +72,6 @@ public:
    */
   void reset();
 
-  /**
-   * @brief Set the maximum range for the laser scanner.
-   */
-  void setRangeMax(double range_max);
-
 protected:
   // Resolution of the NDT map
   double resolution_;
@@ -90,4 +88,4 @@ protected:
 
 }  // namespace ndt_2d
 
-#endif  // NDT_2D__NDT_SCAN_MATCHER_HPP_
+#endif  // NDT_2D__SCAN_MATCHER_NDT_HPP_

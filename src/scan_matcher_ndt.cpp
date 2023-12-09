@@ -4,13 +4,13 @@
  */
 
 #include <Eigen/Core>
-#include <ndt_2d/ndt_scan_matcher.hpp>
 #include <ndt_2d/ndt_mapper.hpp>
+#include <ndt_2d/scan_matcher_ndt.hpp>
 
 namespace ndt_2d
 {
 
-ScanMatcherNDT::ScanMatcherNDT(rclcpp::Node * node)
+void ScanMatcherNDT::initialize(rclcpp::Node * node, double range_max)
 {
   resolution_ = node->declare_parameter<double>("ndt_resolution", 0.25);
 
@@ -19,7 +19,7 @@ ScanMatcherNDT::ScanMatcherNDT(rclcpp::Node * node)
   linear_res_ = node->declare_parameter<double>("search_linear_resolution", 0.005);
   linear_size_ = node->declare_parameter<double>("search_linear_size", 0.05);
 
-  range_max_ = 25.0;
+  range_max_ = range_max;
 }
 
 void ScanMatcherNDT::addScans(const std::vector<ScanPtr>::const_iterator& begin,
@@ -141,11 +141,6 @@ double ScanMatcherNDT::scorePoints(const std::vector<Point> & points, const Pose
 void ScanMatcherNDT::reset()
 {
   ndt_.reset();
-}
-
-void ScanMatcherNDT::setRangeMax(double range_max)
-{
-  range_max_ = range_max;
 }
 
 }  // namespace ndt_2d

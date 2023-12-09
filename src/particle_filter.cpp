@@ -52,7 +52,7 @@ void ParticleFilter::update(const double dx, const double dy, const double dth)
   updateStatistics();
 }
 
-void ParticleFilter::measure(const std::shared_ptr<ScanMatcherNDT> & matcher,
+void ParticleFilter::measure(const ScanMatcherPtr & matcher,
                              const ScanPtr & scan)
 {
   for (size_t i = 0; i < particles_.size(); ++i)
