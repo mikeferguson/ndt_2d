@@ -335,20 +335,40 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   double sin_lt = sin(laser_transform_.theta);
 
   // Using this scan, convert ROS msg into ndt_2d style scan
-  for (size_t i = 0; i < msg->ranges.size(); ++i)
+  if (laser_inverted_)
   {
-    // Filter out NANs and scans beyond max range
-    if (std::isnan(msg->ranges[i]) || msg->ranges[i] > range_max_) continue;
-    // Project point in laser frame
-    double angle = (msg->angle_min + i * msg->angle_increment);
-    if (laser_inverted_) angle *= -1.0;
-    Point lp(cos(angle) * msg->ranges[i],
-             sin(angle) * msg->ranges[i]);
-    // Transform to robot frame
-    Point point(cos_lt * lp.x - sin_lt * lp.y + laser_transform_.x,
-                sin_lt * lp.x + cos_lt * lp.y + laser_transform_.y);
-    // Add point to scan
-    scan->points.push_back(point);
+    for (size_t i = msg->ranges.size() - 1; i > 0; --i)
+    {
+      // Filter out NANs and scans beyond max range
+      if (std::isnan(msg->ranges[i]) || msg->ranges[i] > range_max_) continue;
+      // Project point in laser frame
+      double angle = -(msg->angle_min + i * msg->angle_increment);
+      Point lp(cos(angle) * msg->ranges[i],
+               sin(angle) * msg->ranges[i]);
+      // Transform to robot frame
+      Point point(cos_lt * lp.x - sin_lt * lp.y + laser_transform_.x,
+                  sin_lt * lp.x + cos_lt * lp.y + laser_transform_.y);
+      // Add point to scan
+      scan->points.push_back(point);
+    }
+  }
+  else
+  {
+    for (size_t i = 0; i < msg->ranges.size(); ++i)
+    {
+      // Filter out NANs and scans beyond max range
+      if (std::isnan(msg->ranges[i]) || msg->ranges[i] > range_max_) continue;
+      // Project point in laser frame
+      double angle = (msg->angle_min + i * msg->angle_increment);
+      //if (laser_inverted_) angle *= -1.0;
+      Point lp(cos(angle) * msg->ranges[i],
+               sin(angle) * msg->ranges[i]);
+      // Transform to robot frame
+      Point point(cos_lt * lp.x - sin_lt * lp.y + laser_transform_.x,
+                  sin_lt * lp.x + cos_lt * lp.y + laser_transform_.y);
+      // Add point to scan
+      scan->points.push_back(point);
+    }
   }
   scan->update();
 
