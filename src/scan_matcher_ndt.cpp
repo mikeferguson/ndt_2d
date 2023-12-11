@@ -116,25 +116,25 @@ double ScanMatcherNDT::matchScan(const ScanPtr & scan, Pose2d & pose,
   // Compute covariance
   covariance = (1 / s) * k + (1 / (s * s) * u * u.transpose());
 
-  return best_score;
+  return best_score / scan_points_to_use;
 }
 
 double ScanMatcherNDT::scoreScan(const ScanPtr & scan) const
 {
   if (!ndt_) return 0.0;
-  return -ndt_->likelihood(scan);
+  return -ndt_->likelihood(scan) / scan->points.size();
 }
 
 double ScanMatcherNDT::scoreScan(const ScanPtr & scan, const Pose2d & pose) const
 {
   if (!ndt_) return 0.0;
-  return -ndt_->likelihood(scan, pose);
+  return -ndt_->likelihood(scan, pose) / scan->points.size();
 }
 
 double ScanMatcherNDT::scorePoints(const std::vector<Point> & points, const Pose2d & pose) const
 {
   if (!ndt_) return 0.0;
-  return -ndt_->likelihood(points, pose);
+  return -ndt_->likelihood(points, pose) / points.size();
 }
 
 void ScanMatcherNDT::reset()
