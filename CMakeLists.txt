@@ -54,16 +54,14 @@ set(dependencies
 
 # Primary library
 add_library(ndt_2d_lib SHARED
-  src/ceres_solver.cpp
   src/constraint.cpp
-  src/graph.cpp
   src/motion_model.cpp
   src/ndt_model.cpp
   src/occupancy_grid.cpp
   src/particle_filter.cpp
   src/scan.cpp
 )
-target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES} Eigen3::Eigen "${cpp_typesupport_target}")
+target_link_libraries(ndt_2d_lib Eigen3::Eigen)
 ament_target_dependencies(ndt_2d_lib ${dependencies})
 
 # Scan Matcher NDT Plugin
@@ -75,10 +73,17 @@ ament_target_dependencies(scan_matcher_ndt ${dependencies})
 
 # Mapping node
 add_library(ndt_2d_mapper SHARED
+  src/ceres_solver.cpp
+  src/graph.cpp
   src/ndt_mapper.cpp
 )
+target_link_libraries(ndt_2d_mapper
+  ndt_2d_lib
+  ${CERES_LIBRARIES}
+  Eigen3::Eigen
+  "${cpp_typesupport_target}"
+)
 ament_target_dependencies(ndt_2d_mapper ${dependencies})
-target_link_libraries(ndt_2d_mapper ndt_2d_lib "${cpp_typesupport_target}")
 rclcpp_components_register_node(ndt_2d_mapper
   PLUGIN "ndt_2d::Mapper"
   EXECUTABLE ndt_2d_map_node
@@ -90,7 +95,7 @@ if(BUILD_TESTING)
 
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(ceres_solver_tests test/ceres_solver_tests.cpp)
-  target_link_libraries(ceres_solver_tests ndt_2d_lib)
+  target_link_libraries(ceres_solver_tests ndt_2d_lib ndt_2d_mapper)
   ament_target_dependencies(ceres_solver_tests ${dependencies})
 
   ament_add_gtest(graph_tests test/graph_tests.cpp)
@@ -114,6 +119,14 @@ install(
 install(
   TARGETS
     ndt_2d_lib
+  EXPORT export_ndt_2d
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  TARGETS
     ndt_2d_mapper
     scan_matcher_ndt
   ARCHIVE DESTINATION lib
@@ -124,5 +137,6 @@ install(
 pluginlib_export_plugin_description_file(ndt_2d plugins.xml)
 ament_export_include_directories(include)
 ament_export_libraries(ndt_2d_lib)
-ament_export_dependencies(rosidl_default_runtime)
+ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
+ament_export_dependencies(${dependencies})
 ament_package()
