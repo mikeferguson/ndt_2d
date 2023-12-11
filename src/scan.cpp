@@ -3,6 +3,7 @@
  * All Rights Reserved
  */
 
+#include <cmath>
 #include <ndt_2d/scan.hpp>
 
 namespace ndt_2d
@@ -47,6 +48,9 @@ std::vector<Point> Scan::getPoints()
 
 void Scan::update()
 {
+  double cos_theta = cos(pose_.theta);
+  double sin_theta = sin(pose_.theta);
+
   // Compute the barycenter
   barycenter_ = pose_;
   if (!points_.empty())
@@ -54,8 +58,8 @@ void Scan::update()
     Point center;
     for (auto & point : points_)
     {
-      center.x += point.x;
-      center.y += point.y;
+      center.x += cos_theta * point.x - sin_theta * point.y;
+      center.y += sin_theta * point.x + cos_theta * point.y;
     }
     barycenter_.x += center.x / points_.size();
     barycenter_.y += center.y / points_.size();

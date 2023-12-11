@@ -50,9 +50,11 @@ TEST(GraphTests, read_write_test)
     scan1->setPose(pose);
     graph.scans.push_back(scan1);
 
-    EXPECT_EQ(3.0, scan1->getBarycenterPose().x);
-    EXPECT_EQ((5.5 / 3.0) + 2.5, scan1->getBarycenterPose().y);
-    EXPECT_EQ(0.05, scan1->getBarycenterPose().theta);
+    double c_x = cos(0.05) * 2.0 - sin(0.05) * (5.5 / 3.0) + 1.0;
+    double c_y = sin(0.05) * 2.0 + cos(0.05) * (5.5 / 3.0) + 2.5;
+    EXPECT_DOUBLE_EQ(c_x, scan1->getBarycenterPose().x);
+    EXPECT_DOUBLE_EQ(c_y, scan1->getBarycenterPose().y);
+    EXPECT_DOUBLE_EQ(0.05, scan1->getBarycenterPose().theta);
 
     ndt_2d::ConstraintPtr constraint = std::make_shared<ndt_2d::Constraint>();
     constraint->begin = 0;
@@ -83,14 +85,15 @@ TEST(GraphTests, read_write_test)
     pose.theta = 0.05;
     scan2->setPose(pose);
 
-    EXPECT_EQ(3.0, scan2->getBarycenterPose().x);
-    EXPECT_EQ((5.5 / 3.0) + 2.3, scan2->getBarycenterPose().y);
-    EXPECT_EQ(0.05, scan2->getBarycenterPose().theta);
+    c_y = sin(0.05) * 2.0 + cos(0.05) * (5.5 / 3.0) + 2.3;
+    EXPECT_DOUBLE_EQ(c_x, scan2->getBarycenterPose().x);
+    EXPECT_DOUBLE_EQ(c_y, scan2->getBarycenterPose().y);
+    EXPECT_DOUBLE_EQ(0.05, scan2->getBarycenterPose().theta);
 
     std::vector<size_t> near = graph.findNearest(scan2);
     EXPECT_EQ(2, near.size());
-    EXPECT_EQ(1, near[0]);
-    EXPECT_EQ(0, near[1]);
+    EXPECT_EQ(0, near[0]);
+    EXPECT_EQ(1, near[1]);
   }
 
   use_barycenter = true;
