@@ -163,33 +163,9 @@ double NDT::likelihood(const std::vector<Point> & points)
   return score;
 }
 
-double NDT::likelihood(const std::vector<Point> & points, const Pose2d & pose)
-{
-  const Eigen::Isometry3d t = toEigen(pose);
-  double score = 0.0;
-  for (auto & point : points)
-  {
-    Eigen::Vector3d p(point.x, point.y, 1.0);
-    p = t * p;
-    score += likelihood(p);
-  }
-  return score;
-}
-
 double NDT::likelihood(const ScanPtr & scan)
 {
-  Pose2d pose;
-  return likelihood(scan, pose);
-}
-
-double NDT::likelihood(const ScanPtr & scan, const Pose2d & correction)
-{
-  // This computation is consistent with how the scan matcher applies corrections
-  Pose2d pose = scan->pose;
-  pose.x += correction.x;
-  pose.y += correction.y;
-  pose.theta += correction.theta;
-  const Eigen::Isometry3d transform = toEigen(pose);
+  const Eigen::Isometry3d transform = toEigen(scan->pose);
 
   double score = 0.0;
   for (auto & point : scan->points)

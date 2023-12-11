@@ -43,7 +43,7 @@ public:
    * @param scan Scan to match against internal NDT map.
    * @param pose The corrected pose that best matches scan to NDT map.
    * @param covariance Covariance matrix for the match.
-   * @returns The likelihood score when scan is at corrected pose.
+   * @returns The score when scan is at corrected pose.
    */
   double matchScan(const ScanPtr & scan, Pose2d & pose,
                    Eigen::Matrix3d & covariance) const;
@@ -53,13 +53,6 @@ public:
    * @param scan Scan to score against internal NDT map.
    */
   double scoreScan(const ScanPtr & scan) const;
-
-  /**
-   * @brief Score a scan against the internal NDT map.
-   * @param scan Scan to score against internal NDT map.
-   * @param pose The pose of the scan within the internal NDT map.
-   */
-  double scoreScan(const ScanPtr & scan, const Pose2d & pose) const;
 
   /**
    * @brief Score a set of points against the internal NDT map.

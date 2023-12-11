@@ -3,6 +3,7 @@
  * All Rights Reserved
  */
 
+#include <ndt_2d/conversions.hpp>
 #include <ndt_2d/scan_matcher_ndt.hpp>
 
 namespace ndt_2d
@@ -95,10 +96,10 @@ double ScanMatcherNDT::matchScan(const ScanPtr & scan, Pose2d & pose,
           points_inner[i].y = points_outer[i].y + dy;
         }
 
-        double likelihood = -ndt_->likelihood(points_inner);
-        if (likelihood < best_score)
+        double score = -ndt_->likelihood(points_inner);
+        if (score < best_score)
         {
-          best_score = likelihood;
+          best_score = score;
           pose.x = dx;
           pose.y = dy;
           pose.theta = dth;
@@ -106,9 +107,9 @@ double ScanMatcherNDT::matchScan(const ScanPtr & scan, Pose2d & pose,
 
         // Covariance computation
         Eigen::Vector3d x(dx, dy, dth);
-        k += x * x.transpose() * likelihood;
-        u += x * likelihood;
-        s += likelihood;
+        k += x * x.transpose() * score;
+        u += x * score;
+        s += score;
       }
     }
   }
@@ -121,20 +122,31 @@ double ScanMatcherNDT::matchScan(const ScanPtr & scan, Pose2d & pose,
 
 double ScanMatcherNDT::scoreScan(const ScanPtr & scan) const
 {
-  if (!ndt_) return 0.0;
-  return -ndt_->likelihood(scan) / scan->points.size();
-}
-
-double ScanMatcherNDT::scoreScan(const ScanPtr & scan, const Pose2d & pose) const
-{
-  if (!ndt_) return 0.0;
-  return -ndt_->likelihood(scan, pose) / scan->points.size();
+  return scorePoints(scan->points, scan->pose);
 }
 
 double ScanMatcherNDT::scorePoints(const std::vector<Point> & points, const Pose2d & pose) const
 {
+  // Need a valid NDT
   if (!ndt_) return 0.0;
-  return -ndt_->likelihood(points, pose) / points.size();
+
+  // Transform points to the pose
+  const Eigen::Isometry3d t = toEigen(pose);
+
+  // Subsample the scan
+  size_t scan_points_to_use = std::min(laser_max_beams_, points.size());
+  double scan_step = static_cast<double>(points.size()) / scan_points_to_use;
+
+  double score = 0.0;
+  for (size_t i = 0; i < scan_points_to_use; ++i)
+  {
+    size_t scan_idx = static_cast<size_t>(i * scan_step);
+    Eigen::Vector3d p(points[scan_idx].x, points[scan_idx].y, 1.0);
+    p = t * p;
+    score += -ndt_->likelihood(p);
+  }
+
+  return score / scan_points_to_use;
 }
 
 void ScanMatcherNDT::reset()

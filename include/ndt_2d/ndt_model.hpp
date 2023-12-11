@@ -162,26 +162,10 @@ public:
 
   /**
    * @brief Query the NDT.
-   * @param points The vector of points to score.
-   * @param pose All points will be translated as if this were the origin of the points.
-   * @returns The probability of the points.
-   */
-  double likelihood(const std::vector<Point> & points, const Pose2d & pose);
-
-  /**
-   * @brief Query the NDT.
    * @param scan The scan to score. Note that scan->pose WILL be used.
    * @returns The probability of the scan.
    */
   double likelihood(const ScanPtr & scan);
-
-  /**
-   * @brief Query the NDT.
-   * @param scan The scan to score. Note that scan->pose WILL be used.
-   * @param correction Pose correction to add to scan pose.
-   * @returns The probability of the scan.
-   */
-  double likelihood(const ScanPtr & scan, const Pose2d & correction);
 
 private:
   /**

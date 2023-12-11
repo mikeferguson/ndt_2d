@@ -359,7 +359,6 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       if (std::isnan(msg->ranges[i]) || msg->ranges[i] > range_max_) continue;
       // Project point in laser frame
       double angle = (msg->angle_min + i * msg->angle_increment);
-      //if (laser_inverted_) angle *= -1.0;
       Point lp(cos(angle) * msg->ranges[i],
                sin(angle) * msg->ranges[i]);
       // Transform to robot frame
@@ -430,8 +429,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       Pose2d correction;
       Eigen::Matrix3d covariance;
       double uncorrected_score = local_scan_matcher_->scoreScan(scan);
-      local_scan_matcher_->matchScan(scan, correction, covariance);
-      matched_score = local_scan_matcher_->scoreScan(scan, correction);
+      matched_score = local_scan_matcher_->matchScan(scan, correction, covariance);
       RCLCPP_INFO(logger_, "           %f, %f, %f (%f -> %f)",
                   correction.x, correction.y, correction.theta, uncorrected_score, matched_score);
 
@@ -462,8 +460,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     Pose2d correction;
     Eigen::Matrix3d covariance;
     double uncorrected_score = global_scan_matcher_->scoreScan(scan);
-    global_scan_matcher_->matchScan(scan, correction, covariance);
-    double score = global_scan_matcher_->scoreScan(scan, correction);
+    double score = global_scan_matcher_->matchScan(scan, correction, covariance);
     RCLCPP_INFO(logger_, "           %f, %f, %f (%f -> %f)",
                 correction.x, correction.y, correction.theta, uncorrected_score, score);
 
@@ -508,8 +505,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
     // Try to match scans
     Pose2d correction;
     Eigen::Matrix3d covariance;
-    local_scan_matcher_->matchScan(scan, correction, covariance);
-    double score = local_scan_matcher_->scoreScan(scan, correction);
+    double score = local_scan_matcher_->matchScan(scan, correction, covariance);
 
     if (score < uncorrected_score)
     {
