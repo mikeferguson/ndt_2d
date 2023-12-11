@@ -109,13 +109,13 @@ NDT::~NDT()
 void NDT::addScan(const ScanPtr & scan)
 {
   // Precompute transforms
-  double cos_th = cos(scan->pose.theta);
-  double sin_th = sin(scan->pose.theta);
+  double cos_th = cos(scan->getPose().theta);
+  double sin_th = sin(scan->getPose().theta);
 
-  for (auto & point : scan->points)
+  for (auto & point : scan->getPoints())
   {
     // Transform the point by pose
-    Eigen::Vector2d p(scan->pose.x, scan->pose.y);
+    Eigen::Vector2d p(scan->getPose().x, scan->getPose().y);
     p(0) += point.x * cos_th - point.y * sin_th;
     p(1) += point.x * sin_th + point.y * cos_th;
 
@@ -165,10 +165,10 @@ double NDT::likelihood(const std::vector<Point> & points)
 
 double NDT::likelihood(const ScanPtr & scan)
 {
-  const Eigen::Isometry3d transform = toEigen(scan->pose);
+  const Eigen::Isometry3d transform = toEigen(scan->getPose());
 
   double score = 0.0;
-  for (auto & point : scan->points)
+  for (auto & point : scan->getPoints())
   {
     Eigen::Vector3d p(point.x, point.y, 1.0);
     p = transform * p;

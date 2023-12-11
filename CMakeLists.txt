@@ -61,6 +61,7 @@ add_library(ndt_2d_lib SHARED
   src/ndt_model.cpp
   src/occupancy_grid.cpp
   src/particle_filter.cpp
+  src/scan.cpp
 )
 target_link_libraries(ndt_2d_lib ${CERES_LIBRARIES} Eigen3::Eigen "${cpp_typesupport_target}")
 ament_target_dependencies(ndt_2d_lib ${dependencies})

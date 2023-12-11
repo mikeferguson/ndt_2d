@@ -171,31 +171,32 @@ TEST(NdtModelTests, test_ndt)
   ndt_2d::NDT ndt(1.0, 10.0, 10.0, -5.0, -5.0);
 
   // Create a scan to input
-  ndt_2d::ScanPtr scan(new ndt_2d::Scan());
-  scan->pose.x = 0.0;
-  scan->pose.y = 0.0;
-  scan->pose.theta = 0.0;
+  ndt_2d::ScanPtr scan(new ndt_2d::Scan(0));
+  ndt_2d::Pose2d pose;
+  scan->setPose(pose);
   ndt_2d::Point p(3.5, 3.5);
-  scan->points.push_back(p);
+  std::vector<ndt_2d::Point> points;
+  points.push_back(p);
   p.x = 3.45;
   p.y = 3.4;
-  scan->points.push_back(p);
+  points.push_back(p);
   p.x = 3.55;
   p.y = 3.6;
-  scan->points.push_back(p);
+  points.push_back(p);
   p.x = 3.45;
   p.y = 3.6;
-  scan->points.push_back(p);
+  points.push_back(p);
   p.x = 3.45;
   p.y = 3.6;
-  scan->points.push_back(p);
+  points.push_back(p);
+  scan->setPoints(points);
 
   // Update NDT
   ndt.addScan(scan);
   ndt.compute();
 
   // Build vector of points to score
-  std::vector<ndt_2d::Point> points;
+  points.clear();
   p.x = 3.5;
   p.y = 3.5;
   points.push_back(p);

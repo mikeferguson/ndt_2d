@@ -17,44 +17,42 @@ TEST(GraphTests, read_write_test)
   {
     ndt_2d::Graph graph(use_barycenter);
 
-    ndt_2d::ScanPtr scan0 = std::make_shared<ndt_2d::Scan>();
-    scan0->id = 0;
-    scan0->points.resize(3);
-    scan0->points[0].x = 2.0;
-    scan0->points[0].y = 3.0;
-    scan0->points[1].x = 3.0;
-    scan0->points[1].y = 3.0;
-    scan0->points[2].x = 4.0;
-    scan0->points[2].y = 4.0;
-    scan0->pose.x = 0.0;
-    scan0->pose.y = 1.0;
-    scan0->pose.theta = 0.0;
+    ndt_2d::ScanPtr scan0 = std::make_shared<ndt_2d::Scan>(0);
+    std::vector<ndt_2d::Point> points;
+    points.resize(3);
+    points[0].x = 2.0;
+    points[0].y = 3.0;
+    points[1].x = 3.0;
+    points[1].y = 3.0;
+    points[2].x = 4.0;
+    points[2].y = 4.0;
+    scan0->setPoints(points);
+    ndt_2d::Pose2d pose(0.0, 1.0, 0.0);
+    scan0->setPose(pose);
     graph.scans.push_back(scan0);
 
     // Check barycenter calculations
-    scan0->update();
-    EXPECT_EQ(3.0, scan0->barycenter.x);
-    EXPECT_EQ((10 / 3.0), scan0->barycenter.y);
-    EXPECT_EQ(0.0, scan0->barycenter.theta);
+    EXPECT_EQ(3.0, scan0->getBarycenterPose().x);
+    EXPECT_EQ((10 / 3.0) + 1, scan0->getBarycenterPose().y);
+    EXPECT_EQ(0.0, scan0->getBarycenterPose().theta);
 
-    ndt_2d::ScanPtr scan1 = std::make_shared<ndt_2d::Scan>();
-    scan1->id = 1;
-    scan1->points.resize(3);
-    scan1->points[0].x = 1.0;
-    scan1->points[0].y = 1.5;
-    scan1->points[1].x = 2.0;
-    scan1->points[1].y = 1.5;
-    scan1->points[2].x = 3.0;
-    scan1->points[2].y = 2.5;
-    scan1->pose.x = 1.0;
-    scan1->pose.y = 2.5;
-    scan1->pose.theta = 0.05;
+    ndt_2d::ScanPtr scan1 = std::make_shared<ndt_2d::Scan>(1);
+    points[0].x = 1.0;
+    points[0].y = 1.5;
+    points[1].x = 2.0;
+    points[1].y = 1.5;
+    points[2].x = 3.0;
+    points[2].y = 2.5;
+    scan1->setPoints(points);
+    pose.x = 1.0;
+    pose.y = 2.5;
+    pose.theta = 0.05;
+    scan1->setPose(pose);
     graph.scans.push_back(scan1);
 
-    scan1->update();
-    EXPECT_EQ(2.0, scan1->barycenter.x);
-    EXPECT_EQ((5.5 / 3.0), scan1->barycenter.y);
-    EXPECT_EQ(0.05, scan1->barycenter.theta);
+    EXPECT_EQ(3.0, scan1->getBarycenterPose().x);
+    EXPECT_EQ((5.5 / 3.0) + 2.5, scan1->getBarycenterPose().y);
+    EXPECT_EQ(0.05, scan1->getBarycenterPose().theta);
 
     ndt_2d::ConstraintPtr constraint = std::make_shared<ndt_2d::Constraint>();
     constraint->begin = 0;
@@ -72,23 +70,22 @@ TEST(GraphTests, read_write_test)
     // Save simple graph for later testing of the load function
     graph.save(BAG_NAME);
 
-    ndt_2d::ScanPtr scan2 = std::make_shared<ndt_2d::Scan>();
-    scan2->id = 2;
-    scan2->points.resize(3);
-    scan2->points[0].x = 1.0;
-    scan2->points[0].y = 1.5;
-    scan2->points[1].x = 2.0;
-    scan2->points[1].y = 1.5;
-    scan2->points[2].x = 3.0;
-    scan2->points[2].y = 2.5;
-    scan2->pose.x = 1.0;
-    scan2->pose.y = 2.3;
-    scan2->pose.theta = 0.05;
+    ndt_2d::ScanPtr scan2 = std::make_shared<ndt_2d::Scan>(2);
+    points[0].x = 1.0;
+    points[0].y = 1.5;
+    points[1].x = 2.0;
+    points[1].y = 1.5;
+    points[2].x = 3.0;
+    points[2].y = 2.5;
+    scan2->setPoints(points);
+    pose.x = 1.0;
+    pose.y = 2.3;
+    pose.theta = 0.05;
+    scan2->setPose(pose);
 
-    scan2->update();
-    EXPECT_EQ(2.0, scan2->barycenter.x);
-    EXPECT_EQ((5.5 / 3.0), scan2->barycenter.y);
-    EXPECT_EQ(0.05, scan2->barycenter.theta);
+    EXPECT_EQ(3.0, scan2->getBarycenterPose().x);
+    EXPECT_EQ((5.5 / 3.0) + 2.3, scan2->getBarycenterPose().y);
+    EXPECT_EQ(0.05, scan2->getBarycenterPose().theta);
 
     std::vector<size_t> near = graph.findNearest(scan2);
     EXPECT_EQ(2, near.size());
@@ -99,8 +96,8 @@ TEST(GraphTests, read_write_test)
   use_barycenter = true;
   ndt_2d::Graph new_graph(use_barycenter, BAG_NAME);
   EXPECT_EQ(2, new_graph.scans.size());
-  EXPECT_EQ(3, new_graph.scans[0]->points.size());
-  EXPECT_EQ(3, new_graph.scans[1]->points.size());
+  EXPECT_EQ(3, new_graph.scans[0]->getPoints().size());
+  EXPECT_EQ(3, new_graph.scans[1]->getPoints().size());
   EXPECT_EQ(1, new_graph.constraints.size());
 
   // Verify constraint save/load

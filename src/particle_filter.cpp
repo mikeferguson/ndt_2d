@@ -60,7 +60,7 @@ void ParticleFilter::measure(const ScanMatcherPtr & matcher,
     // Pose of this particle in NDT format
     Pose2d pose(particles_[i](0), particles_[i](1), particles_[i](2));
     // Compute the score, ignoring the scan->pose
-    weights_[i] = matcher->scorePoints(scan->points, pose);
+    weights_[i] = matcher->scorePoints(scan->getPoints(), pose);
   }
   updateStatistics();
 }

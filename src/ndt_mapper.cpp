@@ -200,10 +200,8 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
   else if (enable_mapping_)
   {
     // If mapping, connect this pose to the graph
-    ScanPtr scan = std::make_shared<Scan>();
-    scan->id = graph_->scans.size();
-    scan->pose = fromMsg(msg->pose.pose);
-    scan->update();
+    ScanPtr scan = std::make_shared<Scan>(graph_->scans.size());
+    scan->setPose(fromMsg(msg->pose.pose));
 
     // Find the closest node in existing graph, then add scan to graph
     std::vector<size_t> nearest = graph_->findNearest(scan);
@@ -324,10 +322,10 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
   }
 
   // Need to convert the scan into an ndt_2d style
-  ScanPtr scan = std::make_shared<Scan>();
-  scan->id = graph_->scans.size();
-  scan->pose = robot_pose;
-  scan->points.reserve(msg->ranges.size());
+  ScanPtr scan = std::make_shared<Scan>(graph_->scans.size());
+  scan->setPose(robot_pose);
+  std::vector<Point> points;
+  points.reserve(msg->ranges.size());
 
   // Minor optimization
   double cos_lt = cos(laser_transform_.theta);
@@ -348,7 +346,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       Point point(cos_lt * lp.x - sin_lt * lp.y + laser_transform_.x,
                   sin_lt * lp.x + cos_lt * lp.y + laser_transform_.y);
       // Add point to scan
-      scan->points.push_back(point);
+      points.push_back(point);
     }
   }
   else
@@ -365,16 +363,16 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       Point point(cos_lt * lp.x - sin_lt * lp.y + laser_transform_.x,
                   sin_lt * lp.x + cos_lt * lp.y + laser_transform_.y);
       // Add point to scan
-      scan->points.push_back(point);
+      points.push_back(point);
     }
   }
-  scan->update();
+  scan->setPoints(points);
 
   if (use_particle_filter_)
   {
     // Extract change in position in map frame
-    Eigen::Vector3d map_delta(scan->pose.x - prev_robot_pose_.x,
-                              scan->pose.y - prev_robot_pose_.y,
+    Eigen::Vector3d map_delta(scan->getPose().x - prev_robot_pose_.x,
+                              scan->getPose().y - prev_robot_pose_.y,
                               1.0);
     // Transform change in pose into robot-centric frame
     Eigen::Isometry3d transform(Eigen::Translation3d(0.0, 0.0, 0.0) *
@@ -383,7 +381,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     Eigen::Vector3d robot_delta = transform.inverse() * map_delta;
     // Compute change in heading
     robot_delta(2) = angles::shortest_angular_distance(prev_robot_pose_.theta,
-                                                       scan->pose.theta);
+                                                       scan->getPose().theta);
 
     RCLCPP_INFO(logger_, "Updating filter with control %f %f %f", robot_delta(0),
                          robot_delta(1), robot_delta(2));
@@ -393,9 +391,8 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     filter_->resample(kld_err_, kld_z_);
 
     auto mean = filter_->getMean();
-    scan->pose.x = mean(0);
-    scan->pose.y = mean(1);
-    scan->pose.theta = mean(2);
+    Pose2d mean_pose(mean(0), mean(1), mean(2));
+    scan->setPose(mean_pose);
 
     // Publish visualization
     geometry_msgs::msg::PoseArray msg;
@@ -404,10 +401,11 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     filter_->getMsg(msg);
     particle_pub_->publish(msg);
 
-    RCLCPP_INFO(logger_, "New pose: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
+    RCLCPP_INFO(logger_, "New pose: %f, %f, %f",
+                scan->getPose().x, scan->getPose().y, scan->getPose().theta);
 
     prev_odom_pose_ = odom_pose;
-    prev_robot_pose_ = scan->pose;
+    prev_robot_pose_ = scan->getPose();
   }
   else if (enable_mapping_)
   {
@@ -434,21 +432,23 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
                   correction.x, correction.y, correction.theta, uncorrected_score, matched_score);
 
       // Add correction to scan corrected pose
-      scan->pose.x += correction.x;
-      scan->pose.y += correction.y;
-      scan->pose.theta += correction.theta;
+      correction.x += scan->getPose().x;
+      correction.y += scan->getPose().y;
+      correction.theta += scan->getPose().theta;
+      scan->setPose(correction);
 
       // Add odom constraint to the graph
       ConstraintPtr constraint = makeConstraint(graph_->scans.back(), scan, covariance);
       graph_->constraints.push_back(constraint);
     }
 
-    RCLCPP_INFO(logger_, "Corrected: %f, %f, %f", scan->pose.x, scan->pose.y, scan->pose.theta);
+    RCLCPP_INFO(logger_, "Corrected: %f, %f, %f",
+                scan->getPose().x, scan->getPose().y, scan->getPose().theta);
 
     // Append new scan to our graph
     graph_->scans.push_back(scan);
     prev_odom_pose_ = odom_pose;
-    prev_robot_pose_ = scan->pose;
+    prev_robot_pose_ = scan->getPose();
     map_update_available_ = true;
 
     // Global consistency - search scans for global matches
@@ -465,12 +465,13 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
                 correction.x, correction.y, correction.theta, uncorrected_score, score);
 
     // Add correction to scan corrected pose
-    scan->pose.x += correction.x;
-    scan->pose.y += correction.y;
-    scan->pose.theta += correction.theta;
+    correction.x += scan->getPose().x;
+    correction.y += scan->getPose().y;
+    correction.theta += scan->getPose().theta;
+    scan->setPose(correction);
 
     prev_odom_pose_ = odom_pose;
-    prev_robot_pose_ = scan->pose;
+    prev_robot_pose_ = scan->getPose();
   }
 }
 
@@ -490,7 +491,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
   for (auto i : scans)
   {
     const auto & candidate = graph_->scans[i];
-    if (candidate->points.empty()) continue;
+    if (candidate->getPoints().empty()) continue;
 
     // Take one additional scan on either side of candidate
     size_t begin_idx = (i > 0) ? i - 1: i;
@@ -510,12 +511,13 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
     if (score < uncorrected_score)
     {
       RCLCPP_INFO(logger_, "Adding loop closure from %lu to %lu (score %f -> %f)",
-                           candidate->id, scan->id, uncorrected_score, score);
+                           candidate->getId(), scan->getId(), uncorrected_score, score);
 
       // Correct pose
-      scan->pose.x += correction.x;
-      scan->pose.y += correction.y;
-      scan->pose.theta += correction.theta;
+      correction.x += scan->getPose().x;
+      correction.y += scan->getPose().y;
+      correction.theta += scan->getPose().theta;
+      scan->setPose(correction);
 
       // Add constraint to the graph
       ConstraintPtr constraint = makeConstraint(candidate, scan, covariance);

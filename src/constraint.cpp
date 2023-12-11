@@ -14,17 +14,17 @@ ConstraintPtr makeConstraint(const ScanPtr & from,
                              Eigen::Matrix3d & covariance)
 {
   ConstraintPtr constraint = std::make_shared<Constraint>();
-  constraint->begin = from->id;
-  constraint->end = to->id;
+  constraint->begin = from->getId();
+  constraint->end = to->getId();
   // Get the delta in map coordinates
-  double dx = to->pose.x - from->pose.x;
-  double dy = to->pose.y - from->pose.y;
+  double dx = to->getPose().x - from->getPose().x;
+  double dy = to->getPose().y - from->getPose().y;
   // Convert dx/dy into the coordinate frame of begin->pose
-  double costh = cos(from->pose.theta);
-  double sinth = sin(from->pose.theta);
+  double costh = cos(from->getPose().theta);
+  double sinth = sin(from->getPose().theta);
   constraint->transform(0) = costh * dx + sinth * dy;
   constraint->transform(1) = -sinth * dx + costh * dy;
-  constraint->transform(2) = to->pose.theta - from->pose.theta;
+  constraint->transform(2) = to->getPose().theta - from->getPose().theta;
   // Create information matrix
   constraint->information = covariance.inverse();
   // Default is not switchable

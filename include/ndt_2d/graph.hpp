@@ -74,7 +74,7 @@ private:
     inline double kdtree_get_pt(const size_t idx, const size_t dim) const
     {
       const ScanPtr & scan = graph_->scans[idx];
-      const Pose2d & pose = use_barycenter_ ? scan->barycenter : scan->pose;
+      const Pose2d & pose = use_barycenter_ ? scan->getBarycenterPose() : scan->getPose();
       if (dim == 0) return pose.x;
       else return pose.y;
     }

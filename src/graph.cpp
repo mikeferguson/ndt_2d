@@ -42,18 +42,18 @@ Graph::Graph(bool use_barycenter, const std::string & filename)
       ndt_2d::msg::Scan::SharedPtr scan_msg = std::make_shared<ndt_2d::msg::Scan>();
       scan_serialization.deserialize_message(&serialized_msg, scan_msg.get());
 
-      ScanPtr scan = std::make_shared<Scan>();
-      scan->id = scan_msg->id;
-      scan->pose.x = scan_msg->pose.position.x;
-      scan->pose.y = scan_msg->pose.position.y;
-      scan->pose.theta = scan_msg->pose.orientation.w;
-      scan->points.resize(scan_msg->points.size());
+      ScanPtr scan = std::make_shared<Scan>(scan_msg->id);
+      Pose2d pose(scan_msg->pose.position.x, scan_msg->pose.position.y,
+                  scan_msg->pose.orientation.w);
+      scan->setPose(pose);
+      std::vector<Point> points;
+      points.resize(scan_msg->points.size());
       for (size_t i = 0; i < scan_msg->points.size(); ++i)
       {
-        scan->points[i].x = scan_msg->points[i].x;
-        scan->points[i].y = scan_msg->points[i].y;
+        points[i].x = scan_msg->points[i].x;
+        points[i].y = scan_msg->points[i].y;
       }
-      scan->update();
+      scan->setPoints(points);
       scans.push_back(scan);
     }
     else
@@ -96,15 +96,16 @@ bool Graph::save(const std::string & filename)
   {
     // Convert scan into a ROS message
     ndt_2d::msg::Scan::SharedPtr msg = std::make_shared<ndt_2d::msg::Scan>();
-    msg->id = scan->id;
-    msg->pose.position.x = scan->pose.x;
-    msg->pose.position.y = scan->pose.y;
-    msg->pose.orientation.w = scan->pose.theta;
-    msg->points.resize(scan->points.size());
-    for (size_t i = 0; i < scan->points.size(); ++i)
+    msg->id = scan->getId();
+    msg->pose.position.x = scan->getPose().x;
+    msg->pose.position.y = scan->getPose().y;
+    msg->pose.orientation.w = scan->getPose().theta;
+    std::vector<Point> points = scan->getPoints();
+    msg->points.resize(points.size());
+    for (size_t i = 0; i < points.size(); ++i)
     {
-      msg->points[i].x = scan->points[i].x;
-      msg->points[i].y = scan->points[i].y;
+      msg->points[i].x = points[i].x;
+      msg->points[i].y = points[i].y;
     }
     // Save message to bagfile
     std::shared_ptr<rclcpp::SerializedMessage> serialized_msg =
@@ -150,7 +151,7 @@ std::vector<size_t> Graph::findNearest(const ScanPtr & scan, double dist, int li
   tree.buildIndex();
 
   // Search KD-tree for neighbors
-  const Pose2d & pose = use_barycenter_ ? scan->barycenter : scan->pose;
+  const Pose2d & pose = use_barycenter_ ? scan->getBarycenterPose() : scan->getPose();
   const double query[2] = {pose.x, pose.y};
   std::vector<std::pair<unsigned, double>> matches;
   nanoflann::SearchParams params;
@@ -184,9 +185,9 @@ void Graph::getMsg(visualization_msgs::msg::MarkerArray & msg, rclcpp::Time & t)
   for (auto & scan : scans)
   {
     // Publish
-    m.id = scan->id;
-    m.pose.position.x = scan->pose.x;
-    m.pose.position.y = scan->pose.y;
+    m.id = scan->getId();
+    m.pose.position.x = scan->getPose().x;
+    m.pose.position.y = scan->getPose().y;
     msg.markers.push_back(m);
   }
 
@@ -208,10 +209,10 @@ void Graph::getMsg(visualization_msgs::msg::MarkerArray & msg, rclcpp::Time & t)
     auto & begin = scans[constraint->begin];
     auto & end = scans[constraint->end];
     m.points.resize(2);
-    m.points[0].x = begin->pose.x;
-    m.points[0].y = begin->pose.y;
-    m.points[1].x = end->pose.x;
-    m.points[1].y = end->pose.y;
+    m.points[0].x = begin->getPose().x;
+    m.points[0].y = begin->getPose().y;
+    m.points[1].x = end->getPose().x;
+    m.points[1].y = end->getPose().y;
     if (constraint->switchable)
     {
       m.color.r = 0.0;

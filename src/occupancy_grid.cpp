@@ -49,16 +49,16 @@ void OccupancyGrid::getMsg(std::vector<ndt_2d::ScanPtr> & scans,
   // Render scans into grid
   for (auto & scan : scans)
   {
-    double pose_x = scan->pose.x;
-    double pose_y = scan->pose.y;
-    double cos_th = cos(scan->pose.theta);
-    double sin_th = sin(scan->pose.theta);
+    double pose_x = scan->getPose().x;
+    double pose_y = scan->getPose().y;
+    double cos_th = cos(scan->getPose().theta);
+    double sin_th = sin(scan->getPose().theta);
 
     // Start raytracing each line from the pose
     const int start_x = (pose_x - grid.info.origin.position.x) / resolution_;
     const int start_y = (pose_y - grid.info.origin.position.y) / resolution_;
 
-    for (auto & point : scan->points)
+    for (auto & point : scan->getPoints())
     {
       const double point_x = point.x * cos_th - point.y * sin_th + pose_x;
       const double point_y = point.x * sin_th + point.y * cos_th + pose_y;
@@ -136,13 +136,13 @@ void OccupancyGrid::updateBounds(std::vector<ndt_2d::ScanPtr>& scans)
   // Iterate through new scans
   for (size_t i = start_idx; i < num_scans_; ++i)
   {
-    double x = scans[i]->pose.x;
-    double y = scans[i]->pose.y;
-    double cos_th = cos(scans[i]->pose.theta);
-    double sin_th = sin(scans[i]->pose.theta);
+    double x = scans[i]->getPose().x;
+    double y = scans[i]->getPose().y;
+    double cos_th = cos(scans[i]->getPose().theta);
+    double sin_th = sin(scans[i]->getPose().theta);
 
     // Iterate through points in the scan
-    for (auto & point : scans[i]->points)
+    for (auto & point : scans[i]->getPoints())
     {
       Point p(x, y);
       p.x += point.x * cos_th - point.y * sin_th;

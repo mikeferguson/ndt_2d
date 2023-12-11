@@ -6,10 +6,11 @@
 #ifndef NDT_2D__SCAN_MATCHER_HPP_
 #define NDT_2D__SCAN_MATCHER_HPP_
 
+#include <Eigen/Core>
 #include <memory>
 #include <string>
 #include <vector>
-#include <ndt_2d/ndt_model.hpp>
+#include <ndt_2d/scan.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 namespace ndt_2d

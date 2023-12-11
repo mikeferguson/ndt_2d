@@ -10,83 +10,12 @@
 #include <Eigen/Eigen>
 #include <memory>
 #include <vector>
+#include <ndt_2d/point.hpp>
+#include <ndt_2d/pose_2d.hpp>
+#include <ndt_2d/scan.hpp>
 
 namespace ndt_2d
 {
-
-struct Point
-{
-  Point()
-  {
-    x = 0;
-    y = 0;
-  }
-
-  Point(double x, double y)
-  {
-    this->x = x;
-    this->y = y;
-  }
-
-  // Point location, in meters
-  double x, y;
-};
-
-struct Pose2d
-{
-  Pose2d()
-  {
-    x = 0.0;
-    y = 0.0;
-    theta = 0.0;
-  }
-
-  Pose2d(double x, double y, double theta)
-  {
-    this->x = x;
-    this->y = y;
-    this->theta = theta;
-  }
-
-  // Pose position in meters
-  double x, y;
-  // Pose orientation in radians
-  double theta;
-};
-
-struct Scan
-{
-  // Unique ID of the scan
-  size_t id;
-  // Pose of scan in the "map" frame
-  Pose2d pose;
-  // Barycenter of the points (computed)
-  Pose2d barycenter;
-  // Points that form the laser scan
-  std::vector<Point> points;
-
-  inline void update()
-  {
-    // Compute the barycenter
-    if (points.empty())
-    {
-      barycenter = pose;
-    }
-    else
-    {
-      Point center;
-      for (auto & point : points)
-      {
-        center.x += point.x;
-        center.y += point.y;
-      }
-      barycenter = pose;
-      barycenter.x = center.x / points.size();
-      barycenter.y = center.y / points.size();
-    }
-  }
-};
-typedef std::shared_ptr<Scan> ScanPtr;
 
 struct Cell
 {

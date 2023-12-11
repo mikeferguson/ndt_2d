@@ -35,22 +35,22 @@ bool CeresSolver::optimize(const std::vector<ConstraintPtr> & constraints,
   // Update node poses
   for (auto & scan : scans)
   {
-    auto node = nodes_.find(scan->id);
+    auto node = nodes_.find(scan->getId());
     if (node != nodes_.end())
     {
       // Update the pose
-      node->second(0) = scan->pose.x;
-      node->second(1) = scan->pose.y;
-      node->second(2) = scan->pose.theta;
+      node->second(0) = scan->getPose().x;
+      node->second(1) = scan->getPose().y;
+      node->second(2) = scan->getPose().theta;
     }
     else
     {
       // New node, insert it
       Eigen::Vector3d pose;
-      pose(0) = scan->pose.x;
-      pose(1) = scan->pose.y;
-      pose(2) = scan->pose.theta;
-      nodes_.insert(std::pair<int, Eigen::Vector3d>(scan->id, pose));
+      pose(0) = scan->getPose().x;
+      pose(1) = scan->getPose().y;
+      pose(2) = scan->getPose().theta;
+      nodes_.insert(std::pair<int, Eigen::Vector3d>(scan->getId(), pose));
     }
   }
 
@@ -63,7 +63,7 @@ bool CeresSolver::optimize(const std::vector<ConstraintPtr> & constraints,
   num_constraints_ = n;
 
   // Make first node fixed
-  auto first_node_ = nodes_.find(scans[0]->id);
+  auto first_node_ = nodes_.find(scans[0]->getId());
   problem_->SetParameterBlockConstant(&first_node_->second(0));
   problem_->SetParameterBlockConstant(&first_node_->second(1));
   problem_->SetParameterBlockConstant(&first_node_->second(2));
@@ -85,13 +85,12 @@ bool CeresSolver::optimize(const std::vector<ConstraintPtr> & constraints,
   // Update corrected poses
   for (auto & scan : scans)
   {
-    auto node = nodes_.find(scan->id);
+    auto node = nodes_.find(scan->getId());
     if (node != nodes_.end())
     {
       // Update the pose
-      scan->pose.x = node->second(0);
-      scan->pose.y = node->second(1);
-      scan->pose.theta = node->second(2);
+      Pose2d pose(node->second(0), node->second(1), node->second(2));
+      scan->setPose(pose);
     }
   }
   return true;
@@ -104,8 +103,8 @@ ceres::ResidualBlockId CeresSolver::addConstraint(const ConstraintPtr & constrai
   ScanPtr & end = scans[constraint->end];
 
   // These are our internal copies of just the node pose
-  auto begin_node = nodes_.find(begin->id);
-  auto end_node = nodes_.find(end->id);
+  auto begin_node = nodes_.find(begin->getId());
+  auto end_node = nodes_.find(end->getId());
 
   const Eigen::Matrix3d sqrt_information = constraint->information.llt().matrixL();
 
@@ -126,8 +125,8 @@ ceres::ResidualBlockId CeresSolver::addConstraint(const ConstraintPtr & constrai
     param[5] = &(end_node->second(2));
     double * residual = new double[3];
     cost_function->Evaluate(param, residual, NULL);
-    std::cout << "Residuals for constraint between " << begin->id
-              << " and " << end->id << std::endl;
+    std::cout << "Residuals for constraint between " << begin->getId()
+              << " and " << end->getId() << std::endl;
     std::cout << "  " << residual[0] << ", " << residual[1] << ", "
               << residual[2] << std::endl;
     delete[] param;
