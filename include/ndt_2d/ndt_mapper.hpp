@@ -70,7 +70,9 @@ protected:
   std::shared_ptr<ParticleFilter> filter_;
 
   // Scan matchers
+  // Used for loop closure when mapping, and localization
   ScanMatcherPtr global_scan_matcher_;
+  // Used for odometric correction when mapping
   ScanMatcherPtr local_scan_matcher_;
   pluginlib::ClassLoader<ScanMatcher> scan_matcher_loader_;
   std::string scan_matcher_type_;

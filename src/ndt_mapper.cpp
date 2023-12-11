@@ -261,9 +261,16 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     // range_max_ must be set before building the global scan matcher NDT
     if (use_particle_filter_ || !enable_mapping_)
     {
+      // When localizing, global scan matcher uses ALL scans
       global_scan_matcher_ = scan_matcher_loader_.createSharedInstance(scan_matcher_type_);
       global_scan_matcher_->initialize("global_scan_matcher", this, range_max_);
       global_scan_matcher_->addScans(graph_->scans.begin(), graph_->scans.end());
+    }
+    else
+    {
+      // When map building, global scan matcher is just for loop closures
+      global_scan_matcher_ = scan_matcher_loader_.createSharedInstance(scan_matcher_type_);
+      global_scan_matcher_->initialize("global_scan_matcher", this, range_max_);
     }
 
     local_scan_matcher_ = scan_matcher_loader_.createSharedInstance(scan_matcher_type_);
@@ -500,13 +507,13 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
     auto end = graph_->scans.begin() + end_idx;
 
     // Build NDT of candidate region
-    local_scan_matcher_->reset();
-    local_scan_matcher_->addScans(begin, end);
+    global_scan_matcher_->reset();
+    global_scan_matcher_->addScans(begin, end);
 
     // Try to match scans
     Pose2d correction;
     Eigen::Matrix3d covariance;
-    double score = local_scan_matcher_->matchScan(scan, correction, covariance);
+    double score = global_scan_matcher_->matchScan(scan, correction, covariance);
 
     if (score < uncorrected_score)
     {
@@ -530,6 +537,11 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
         solver_->optimize(graph_->constraints, graph_->scans);
         optimization_last_ = graph_->scans.size();
       }
+    }
+    else
+    {
+      RCLCPP_INFO(logger_, "Rejecting loop closure from %lu to %lu (score %f -> %f)",
+                           candidate->getId(), scan->getId(), uncorrected_score, score);
     }
 
     if (--num_scans_to_check == 0) break;
