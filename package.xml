@@ -5,7 +5,7 @@
   <version>0.0.0</version>
   <description>2D mapping and localization using the NDT</description>
   <maintainer email="mfergs7@gmail.com">Michael Ferguson</maintainer>
-  <license>TBD</license>
+  <license>BSD-3-Clause</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
