@@ -3,9 +3,18 @@
 This package implements the Normal Distribution Transform (NDT) for mapping
 and localization.
 
+The scan matcher is plugin-based. An example of using the Karto scan matcher
+can be found in the [ndt_2d_karto](https://github.com/mikeferguson/ndt_2d_karto)
+package. This opens up some interesting applications, such as mapping with
+the Karto scan matcher and then using the NDT-based one for localization
+afterwards.
+
+This package is still a work-in-progress - see the open issue for the best
+estimate of what does or does not work.
+
 ## Use Cases
 
- * Mapping: default parameters should work out of the box. The save_map.py
+ * Mapping: default parameters will lead to this use case. The save_map.py
    script can be used to save the NDT map data for later localization.
    The regular nav2_map_server can be used to save the map needed for
    navigation, or it can be re-generated at runtime from the NDT map data.
