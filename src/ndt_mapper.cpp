@@ -9,6 +9,7 @@
 #include <cmath>
 #include <chrono>
 #include <iostream>
+#include <thread>
 #include <ndt_2d/conversions.hpp>
 #include <ndt_2d/ndt_model.hpp>
 #include <ndt_2d/ndt_mapper.hpp>
@@ -23,10 +24,12 @@ namespace ndt_2d
 
 Mapper::Mapper(const rclcpp::NodeOptions & options)
 : rclcpp::Node("ndt_2d_mapper", options),
+  global_scans_processed_(0),
   map_update_available_(false),
   laser_inverted_(false),
   optimization_last_(0),
   scan_matcher_loader_("ndt_2d", "ndt_2d::ScanMatcher"),
+  typical_matcher_response_(-0.5),
   logger_(rclcpp::get_logger("ndt_2d_mapper")),
   prev_odom_pose_is_initialized_(true)
 {
@@ -112,12 +115,15 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
       "particlecloud", rclcpp::SystemDefaultsQoS());
   }
 
-  map_publish_timer_ = this->create_wall_timer(std::chrono::milliseconds(250),
-    std::bind(&Mapper::mapPublishCallback, this));
+  map_publish_thread_ = std::make_unique<std::thread>(&Mapper::mapPublishThread, this);
+  loop_closure_thread_ = std::make_unique<std::thread>(&Mapper::loopClosureThread, this);
 }
 
 Mapper::~Mapper()
 {
+  // Shut down threads
+  map_publish_thread_->join();
+  loop_closure_thread_->join();
   // Clean these up to avoid pluginlib errors
   local_scan_matcher_.reset();
   global_scan_matcher_.reset();
@@ -143,6 +149,7 @@ void Mapper::configure(const std::shared_ptr<srv::Configure::Request> request,
   if (request->action & srv::Configure::Request::LOAD_FROM_FILE)
   {
     RCLCPP_INFO(logger_, "Loading map from %s", request->filename.c_str());
+    std::lock_guard<std::mutex> lock(graph_mutex_);
     graph_ = std::make_shared<Graph>(use_barycenter_, request->filename);
     map_update_available_ = true;
     prev_odom_pose_is_initialized_ = false;
@@ -150,6 +157,7 @@ void Mapper::configure(const std::shared_ptr<srv::Configure::Request> request,
   else if (request->action & srv::Configure::Request::SAVE_TO_FILE)
   {
     RCLCPP_INFO(logger_, "Saving map to %s", request->filename.c_str());
+    std::lock_guard<std::mutex> lock(graph_mutex_);
     graph_->save(request->filename);
   }
 }
@@ -199,6 +207,9 @@ void Mapper::poseCallback(const geometry_msgs::msg::PoseWithCovarianceStamped::C
   }
   else if (enable_mapping_)
   {
+    // Lock graph before interacting
+    std::lock_guard<std::mutex> lock(graph_mutex_);
+
     // If mapping, connect this pose to the graph
     ScanPtr scan = std::make_shared<Scan>(graph_->scans.size());
     scan->setPose(fromMsg(msg->pose.pose));
@@ -264,6 +275,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       // When localizing, global scan matcher uses ALL scans
       global_scan_matcher_ = scan_matcher_loader_.createSharedInstance(scan_matcher_type_);
       global_scan_matcher_->initialize("global_scan_matcher", this, range_max_);
+      // Note: no need to lock graph here, since this thread is the only one that adds scans
       global_scan_matcher_->addScans(graph_->scans.begin(), graph_->scans.end());
     }
     else
@@ -411,12 +423,13 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     RCLCPP_INFO(logger_, "New pose: %f, %f, %f",
                 scan->getPose().x, scan->getPose().y, scan->getPose().theta);
 
+    std::lock_guard<std::mutex> lock(prev_pose_mutex_);
     prev_odom_pose_ = odom_pose;
     prev_robot_pose_ = scan->getPose();
   }
   else if (enable_mapping_)
   {
-    RCLCPP_INFO(logger_, "Adding scan to map");
+    RCLCPP_INFO(logger_, "Adding scan %lu to map", graph_->scans.size());
     RCLCPP_INFO(logger_, "Odom pose: %f, %f, %f", odom_pose.x, odom_pose.y, odom_pose.theta);
 
     double matched_score = 0.0;
@@ -437,6 +450,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       matched_score = local_scan_matcher_->matchScan(scan, correction, covariance);
       RCLCPP_INFO(logger_, "           %f, %f, %f (%f -> %f)",
                   correction.x, correction.y, correction.theta, uncorrected_score, matched_score);
+      typical_matcher_response_ = 0.95 * typical_matcher_response_ + 0.05 * matched_score;
 
       // Add correction to scan corrected pose
       correction.x += scan->getPose().x;
@@ -446,6 +460,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
 
       // Add odom constraint to the graph
       ConstraintPtr constraint = makeConstraint(graph_->scans.back(), scan, covariance);
+      std::lock_guard<std::mutex> lock(graph_mutex_);
       graph_->constraints.push_back(constraint);
     }
 
@@ -453,13 +468,16 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
                 scan->getPose().x, scan->getPose().y, scan->getPose().theta);
 
     // Append new scan to our graph
-    graph_->scans.push_back(scan);
+    {
+      std::lock_guard<std::mutex> lock(graph_mutex_);
+      graph_->scans.push_back(scan);
+    }
+
+    // Update previous pose tracking (under lock)
+    std::lock_guard<std::mutex> lock(prev_pose_mutex_);
     prev_odom_pose_ = odom_pose;
     prev_robot_pose_ = scan->getPose();
     map_update_available_ = true;
-
-    // Global consistency - search scans for global matches
-    searchGlobalMatches(scan, matched_score);
   }
   else
   {
@@ -477,127 +495,187 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     correction.theta += scan->getPose().theta;
     scan->setPose(correction);
 
+    std::lock_guard<std::mutex> lock(prev_pose_mutex_);
     prev_odom_pose_ = odom_pose;
     prev_robot_pose_ = scan->getPose();
   }
 }
 
-void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
+void Mapper::loopClosureThread()
 {
-  // Can't do a global search until we have at least enough scans
-  if (graph_->scans.size() <= rolling_depth_)
+  while (rclcpp::ok())
   {
-    return;
-  }
+    std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  // Determine where rolling window starts
-  size_t rolling = graph_->scans.size() - rolling_depth_;
-
-  std::vector<size_t> scans = graph_->findNearest(scan, global_search_size_, rolling);
-  size_t num_scans_to_check = global_search_limit_;
-  for (auto i : scans)
-  {
-    const auto & candidate = graph_->scans[i];
-    if (candidate->getPoints().empty()) continue;
-
-    // Take one additional scan on either side of candidate
-    size_t begin_idx = (i > 0) ? i - 1: i;
-    size_t end_idx = (i < rolling) ? i + 1 : i;
-    auto begin = graph_->scans.begin() + begin_idx;
-    auto end = graph_->scans.begin() + end_idx;
-
-    // Build NDT of candidate region
-    global_scan_matcher_->reset();
-    global_scan_matcher_->addScans(begin, end);
-
-    // Try to match scans
-    Pose2d correction;
-    Eigen::Matrix3d covariance;
-    double score = global_scan_matcher_->matchScan(scan, correction, covariance);
-
-    if (score < uncorrected_score)
+    // Only do loop closure if we are mapping
+    if (!enable_mapping_)
     {
-      RCLCPP_INFO(logger_, "Adding loop closure from %lu to %lu (score %f -> %f)",
-                           candidate->getId(), scan->getId(), uncorrected_score, score);
+      continue;
+    }
 
-      // Correct pose
-      correction.x += scan->getPose().x;
-      correction.y += scan->getPose().y;
-      correction.theta += scan->getPose().theta;
-      scan->setPose(correction);
+    // Determine number of scans (under lock)
+    size_t num_scans;
+    {
+      std::lock_guard<std::mutex> lock(graph_mutex_);
+      num_scans = graph_->scans.size();
+    }
 
-      // Add constraint to the graph
-      ConstraintPtr constraint = makeConstraint(candidate, scan, covariance);
-      constraint->switchable = true;
-      graph_->constraints.push_back(constraint);
+    // Can't do a global search until we have at least enough scans
+    if (num_scans <= rolling_depth_)
+    {
+      continue;
+    }
 
-      if (graph_->scans.size() - optimization_last_ > optimization_node_limit_)
+    // We don't process the initial rolling window for loop closure
+    if (global_scans_processed_ <= rolling_depth_)
+    {
+      global_scans_processed_ = rolling_depth_ + 1;
+    }
+
+    bool new_matches = false;
+    if (num_scans > global_scans_processed_)
+    {
+      // We have new scans to process
+      for (; global_scans_processed_ < num_scans; ++global_scans_processed_)
       {
-        RCLCPP_INFO(logger_, "Optimizing pose graph");
-        solver_->optimize(graph_->constraints, graph_->scans);
-        optimization_last_ = graph_->scans.size();
+        // Determine where rolling window starts
+        size_t rolling = global_scans_processed_ - rolling_depth_;
+
+        // Grab a reference to the scan we are loop closing for and find nearest scan
+        ScanPtr scan;
+        std::vector<size_t> scans;
+        {
+          std::lock_guard<std::mutex> lock(graph_mutex_);
+          scan = graph_->scans[global_scans_processed_];
+          scans = graph_->findNearest(scan, global_search_size_, rolling);
+        }
+
+        // Now do global loop closure scan matching
+        size_t num_scans_to_check = global_search_limit_;
+        for (auto i : scans)
+        {
+          // Lock graph to access scans
+          std::unique_lock<std::mutex> lock(graph_mutex_);
+          const auto candidate = graph_->scans[i];
+          if (candidate->getPoints().empty()) continue;
+
+          // Take one additional scan on either side of candidate
+          size_t begin_idx = (i > 0) ? i - 1: i;
+          size_t end_idx = (i < rolling) ? i + 1 : i;
+          auto begin = graph_->scans.begin() + begin_idx;
+          auto end = graph_->scans.begin() + end_idx;
+
+          // Build NDT of candidate region
+          global_scan_matcher_->reset();
+          global_scan_matcher_->addScans(begin, end);
+
+          // Can unlock graph now before we do the (slow) scan matching
+          lock.unlock();
+
+          // Try to match scans
+          Pose2d correction;
+          Eigen::Matrix3d covariance;
+          double score = global_scan_matcher_->matchScan(scan, correction, covariance);
+
+          if (std::isfinite(score) && (score < typical_matcher_response_))
+          {
+            new_matches = true;
+            RCLCPP_INFO(logger_, "***Adding loop closure from %lu to %lu (score %f)",
+                                 candidate->getId(), scan->getId(), score);
+
+            // Correct pose
+            correction.x += scan->getPose().x;
+            correction.y += scan->getPose().y;
+            correction.theta += scan->getPose().theta;
+            scan->setPose(correction);
+
+            // Add constraint to the graph
+            ConstraintPtr constraint = makeConstraint(candidate, scan, covariance);
+            constraint->switchable = true;
+            lock.lock();  // lock before adding constraint
+            graph_->constraints.push_back(constraint);
+            map_update_available_ = true;
+          }
+          else
+          {
+            RCLCPP_INFO(logger_, "***Rejecting loop closure from %lu to %lu (score %f)",
+                                 candidate->getId(), scan->getId(), score);
+          }
+
+          if (--num_scans_to_check == 0) break;
+        }
       }
     }
-    else
-    {
-      RCLCPP_INFO(logger_, "Rejecting loop closure from %lu to %lu (score %f -> %f)",
-                           candidate->getId(), scan->getId(), uncorrected_score, score);
-    }
 
-    if (--num_scans_to_check == 0) break;
+    // Should we now do global optimization?
+    if (new_matches && (num_scans - optimization_last_ > optimization_node_limit_))
+    {
+      RCLCPP_INFO(logger_, "Optimizing pose graph");
+      std::lock_guard<std::mutex> lock(graph_mutex_);
+      solver_->optimize(graph_->constraints, graph_->scans);
+      optimization_last_ = graph_->scans.size();
+      map_update_available_ = true;
+    }
   }
 }
 
-void Mapper::publishTransform()
+void Mapper::mapPublishThread()
 {
-  // prev_robot_pose_ pose gives us map -> robot
-  Eigen::Isometry3d map_to_robot = toEigen(prev_robot_pose_);
-
-  // Latest odom pose gives us odom -> robot
-  Eigen::Isometry3d odom_to_robot = toEigen(prev_odom_pose_);
-
-  // Compute map -> odom
-  Eigen::Isometry3d map_to_odom(map_to_robot * odom_to_robot.inverse());
-
-  // Publish TF between map and odom
-  geometry_msgs::msg::TransformStamped transform = tf2::eigenToTransform(map_to_odom);
-  transform.header.stamp = this->now();
-  transform.header.frame_id = "map";
-  transform.child_frame_id = odom_frame_;
-  tf2_broadcaster_->sendTransform(transform);
-}
-
-// TODO(fergs): This should move to a separate thread, with proper locking
-void Mapper::mapPublishCallback()
-{
-  if (!map_update_available_)
+  while (rclcpp::ok())
   {
+    if (map_update_available_)
+    {
+      map_update_available_ = false;
+      rclcpp::Time now = this->now();
+
+      // Publish an occupancy grid
+      nav_msgs::msg::OccupancyGrid grid_msg;
+      grid_msg.header.frame_id = "map";
+      grid_msg.header.stamp = now;
+      grid_msg.info.map_load_time = now;
+      {
+        std::lock_guard<std::mutex> lock(graph_mutex_);
+        grid_->getMsg(graph_->scans, grid_msg);
+      }
+      map_pub_->publish(grid_msg);
+
+      // Publish the graph
+      visualization_msgs::msg::MarkerArray graph_msg;
+      {
+        std::lock_guard<std::mutex> lock(graph_mutex_);
+        graph_->getMsg(graph_msg, now);
+      }
+      graph_pub_->publish(graph_msg);
+    }
+
+    // Publish TF
     if (!graph_->scans.empty())
     {
-      publishTransform();
+      // Lock previous poses before accessing
+      std::unique_lock<std::mutex> lock(prev_pose_mutex_);
+
+      // prev_robot_pose_ pose gives us map -> robot
+      Eigen::Isometry3d map_to_robot = toEigen(prev_robot_pose_);
+
+      // Latest odom pose gives us odom -> robot
+      Eigen::Isometry3d odom_to_robot = toEigen(prev_odom_pose_);
+
+      // Done accessing previous poses
+      lock.unlock();
+
+      // Compute map -> odom
+      Eigen::Isometry3d map_to_odom(map_to_robot * odom_to_robot.inverse());
+
+      // Publish TF between map and odom
+      geometry_msgs::msg::TransformStamped transform = tf2::eigenToTransform(map_to_odom);
+      transform.header.stamp = this->now();
+      transform.header.frame_id = "map";
+      transform.child_frame_id = odom_frame_;
+      tf2_broadcaster_->sendTransform(transform);
     }
-    // No map update to publish
-    return;
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(250));
   }
-
-  map_update_available_ = false;
-  rclcpp::Time now = this->now();
-
-  // Publish an occupancy grid
-  nav_msgs::msg::OccupancyGrid grid_msg;
-  grid_msg.header.frame_id = "map";
-  grid_msg.header.stamp = now;
-  grid_msg.info.map_load_time = now;
-  grid_->getMsg(graph_->scans, grid_msg);
-  map_pub_->publish(grid_msg);
-
-  // Publish the graph
-  visualization_msgs::msg::MarkerArray graph_msg;
-  graph_->getMsg(graph_msg, now);
-  graph_pub_->publish(graph_msg);
-
-  // Publish TF
-  publishTransform();
 }
 
 }  // namespace ndt_2d

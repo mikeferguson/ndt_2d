@@ -117,6 +117,21 @@ This package implements mapping and localization using the following:
    of average weights as it was unused in every AMCL configuration
    investigated.
 
+## Threading Notes
+
+There are three threads:
+
+ * The rclcpp::spin() thread - this processes the laser scan callback and
+   initial pose callbacks. This is the only thread that adds scans to the
+   graph. This thread also adds constraints to the graph. This is the only
+   thread that changes the prev_X_pose_ variables.
+
+ * The loop closure thread - access graph, adds constraints to the graph.
+
+ * The publish thread - publishes the map and transforms. Accesses graph
+   but does not alter the graph. Access prev_X_pose_ variables but does
+   not alter them.
+
 ## References
 
 <a id="1">[1]</a> Biber, Peter, and Wolfgang Straßer. "The normal distributions transform: A new approach to laser scan matching." Proceedings 2003 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS 2003)(Cat. No. 03CH37453). Vol. 3. IEEE, 2003.

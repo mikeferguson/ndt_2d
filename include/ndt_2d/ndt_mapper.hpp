@@ -10,6 +10,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/transform_broadcaster.h>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
@@ -44,10 +45,15 @@ protected:
   /** @brief ROS callback for new laser scan */
   void laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& msg);
 
-  void searchGlobalMatches(ScanPtr & scan, double score);
-  void publishTransform();
-  void mapPublishCallback();
+  // Thread for doing global loop closure
+  void loopClosureThread();
+  size_t global_scans_processed_;
+  std::unique_ptr<std::thread> loop_closure_thread_;
+
+  // Thread for publishing map and transforms
+  void mapPublishThread();
   bool map_update_available_;
+  std::unique_ptr<std::thread> map_publish_thread_;
 
   // Mapping parameters
   double map_resolution_;
@@ -55,7 +61,6 @@ protected:
   size_t rolling_depth_;
   std::string odom_frame_, robot_frame_, laser_frame_;
   bool laser_inverted_;
-  size_t laser_max_beams_;
   bool use_barycenter_;
   double global_search_size_;
   size_t global_search_limit_;
@@ -76,10 +81,10 @@ protected:
   ScanMatcherPtr local_scan_matcher_;
   pluginlib::ClassLoader<ScanMatcher> scan_matcher_loader_;
   std::string scan_matcher_type_;
+  double typical_matcher_response_;
 
   // ROS 2 interfaces
   rclcpp::Logger logger_;
-  rclcpp::TimerBase::SharedPtr map_publish_timer_;
   rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr map_pub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr graph_pub_;
   rclcpp::Publisher<geometry_msgs::msg::PoseArray>::SharedPtr particle_pub_;
@@ -92,7 +97,9 @@ protected:
 
   // Map data
   GraphPtr graph_;
+  std::mutex graph_mutex_;
   bool enable_mapping_;
+  std::mutex prev_pose_mutex_;
   // The previous odom_frame_->robot_frame_
   Pose2d prev_odom_pose_;
   bool prev_odom_pose_is_initialized_;
