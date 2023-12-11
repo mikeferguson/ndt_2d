@@ -17,6 +17,8 @@ void ScanMatcherNDT::initialize(const std::string & name, rclcpp::Node * node, d
   linear_res_ = node->declare_parameter<double>(name + ".search_linear_resolution", 0.005);
   linear_size_ = node->declare_parameter<double>(name + ".search_linear_size", 0.05);
 
+  laser_max_beams_ = node->declare_parameter<int>(name + ".laser_max_beams", 100);
+
   range_max_ = range_max;
 }
 
@@ -47,8 +49,7 @@ void ScanMatcherNDT::addScans(const std::vector<ScanPtr>::const_iterator& begin,
 }
 
 double ScanMatcherNDT::matchScan(const ScanPtr & scan, Pose2d & pose,
-                                 Eigen::Matrix3d & covariance,
-                                 size_t scan_points_to_use) const
+                                 Eigen::Matrix3d & covariance) const
 {
   // Scans must be added first
   if (!ndt_) return 0.0;
@@ -62,7 +63,7 @@ double ScanMatcherNDT::matchScan(const ScanPtr & scan, Pose2d & pose,
   double s = 0.0;
 
   // Subsample the scan
-  scan_points_to_use = std::min(scan_points_to_use, scan->points.size());
+  size_t scan_points_to_use = std::min(laser_max_beams_, scan->points.size());
   double scan_step = static_cast<double>(scan->points.size()) / scan_points_to_use;
 
   std::vector<Point> points_outer;

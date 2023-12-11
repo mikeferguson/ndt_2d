@@ -43,12 +43,10 @@ public:
    * @param scan Scan to match against internal NDT map.
    * @param pose The corrected pose that best matches scan to NDT map.
    * @param covariance Covariance matrix for the match.
-   * @param scan_points_to_use Number of points to match from the scan.
    * @returns The likelihood score when scan is at corrected pose.
    */
   double matchScan(const ScanPtr & scan, Pose2d & pose,
-                   Eigen::Matrix3d & covariance,
-                   size_t scan_points_to_use) const;
+                   Eigen::Matrix3d & covariance) const;
 
   /**
    * @brief Score a scan against the internal NDT map.
@@ -82,6 +80,7 @@ protected:
   // Search parameters
   double angular_res_, angular_size_;
   double linear_res_, linear_size_;
+  size_t laser_max_beams_;
 
   // Max range of laser scanner
   double range_max_;

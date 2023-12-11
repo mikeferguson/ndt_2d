@@ -30,9 +30,6 @@ and localization.
  * ``global_search_limit``: The maximum number of scans to be considered
    for global loop closure against a new scan.
 
- * ``laser_max_beams``: Maximum number of laser beams to use during scan
-   matching. This mirrors the parameter of the same name in AMCL.
-
  * ``minimum_travel_distance``: Minimum linear travel distance before
    localization update is applied. Applies to both particle filter and
    scan matching based localization. Units: meters.
@@ -85,6 +82,9 @@ Each scan matcher uses the following parameters, namespaced into either
 
  * ``ndt_resolution``: Resolution used for the NDT grid. Every cell of this
    resolution will be represented by a single Gaussian function. Units: meters.
+
+ * ``laser_max_beams``: Maximum number of laser beams to use during scan
+   matching. This mirrors the parameter of the same name in AMCL.
 
  * ``search_angular_resolution``: Angular resolution to use for the scan
    matching search. Units: radians.

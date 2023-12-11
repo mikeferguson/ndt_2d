@@ -36,7 +36,6 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
   rolling_depth_ = this->declare_parameter<int>("rolling_depth", 10);
   robot_frame_ = this->declare_parameter<std::string>("robot_frame", "base_link");
   odom_frame_ = this->declare_parameter<std::string>("odom_frame", "odom");
-  laser_max_beams_ = this->declare_parameter<int>("laser_max_beams", 100);
   transform_timeout_ = this->declare_parameter<double>("transform_timeout", 0.2);
   use_barycenter_ = this->declare_parameter<bool>("use_barycenter", true);
   global_search_size_ = this->declare_parameter<double>("global_search_size", 0.2);
@@ -431,7 +430,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       Pose2d correction;
       Eigen::Matrix3d covariance;
       double uncorrected_score = local_scan_matcher_->scoreScan(scan);
-      local_scan_matcher_->matchScan(scan, correction, covariance, laser_max_beams_);
+      local_scan_matcher_->matchScan(scan, correction, covariance);
       matched_score = local_scan_matcher_->scoreScan(scan, correction);
       RCLCPP_INFO(logger_, "           %f, %f, %f (%f -> %f)",
                   correction.x, correction.y, correction.theta, uncorrected_score, matched_score);
@@ -463,7 +462,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     Pose2d correction;
     Eigen::Matrix3d covariance;
     double uncorrected_score = global_scan_matcher_->scoreScan(scan);
-    global_scan_matcher_->matchScan(scan, correction, covariance, laser_max_beams_);
+    global_scan_matcher_->matchScan(scan, correction, covariance);
     double score = global_scan_matcher_->scoreScan(scan, correction);
     RCLCPP_INFO(logger_, "           %f, %f, %f (%f -> %f)",
                 correction.x, correction.y, correction.theta, uncorrected_score, score);
@@ -509,7 +508,7 @@ void Mapper::searchGlobalMatches(ScanPtr & scan, double uncorrected_score)
     // Try to match scans
     Pose2d correction;
     Eigen::Matrix3d covariance;
-    local_scan_matcher_->matchScan(scan, correction, covariance, laser_max_beams_);
+    local_scan_matcher_->matchScan(scan, correction, covariance);
     double score = local_scan_matcher_->scoreScan(scan, correction);
 
     if (score < uncorrected_score)
