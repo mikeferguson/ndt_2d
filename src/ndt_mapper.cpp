@@ -82,7 +82,7 @@ Mapper::Mapper(const rclcpp::NodeOptions & options)
     size_t max_p = this->declare_parameter<int>("max_particles", 500);
 
     kld_err_ = this->declare_parameter<double>("kld_err", 0.01);
-    kld_z_ = this->declare_parameter<double>("kld_z", 0.99);
+    kld_z_ = this->declare_parameter<double>("kld_z", 2.3);
 
     filter_ = std::make_shared<ParticleFilter>(min_p, max_p, model);
   }
