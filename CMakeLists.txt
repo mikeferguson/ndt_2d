@@ -5,6 +5,11 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+  message("${PROJECT_NAME}: Defaulting to Release build")
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(angles REQUIRED)
