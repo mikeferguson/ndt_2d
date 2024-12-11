@@ -319,7 +319,7 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     return;
   }
 
-  // Find pose of the robot in odometry frame
+  // Find pose of the robot in odometry frame (at start of laser scan)
   geometry_msgs::msg::PoseStamped odom_pose_tf;
   odom_pose_tf.header.stamp = msg->header.stamp;
   odom_pose_tf.header.frame_id = robot_frame_;
@@ -363,6 +363,37 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
     robot_pose.theta = angles::normalize_angle(prev_robot_pose_.theta + dth);
   }
 
+  // Now determine robot pose at end of laser scan
+  geometry_msgs::msg::PoseStamped end_odom_pose_tf;
+  end_odom_pose_tf.header.stamp = rclcpp::Time(msg->header.stamp) +
+    rclcpp::Duration::from_seconds(
+      static_cast<double>(msg->ranges.size() - 1) * static_cast<double>(msg->time_increment));
+  end_odom_pose_tf.header.frame_id = robot_frame_;
+  end_odom_pose_tf.pose.orientation.w = 1.0;
+  try
+  {
+    tf2_buffer_->transform(end_odom_pose_tf, end_odom_pose_tf, odom_frame_,
+                           tf2::durationFromSec(transform_timeout_));
+  }
+  catch (const tf2::TransformException& ex)
+  {
+    RCLCPP_ERROR(logger_, "Could not transform %s to %s frame.",
+                 robot_frame_.c_str(), odom_frame_.c_str());
+    return;
+  }
+
+  // Determine movement between start and end of laser scan
+  Pose2d translation = fromMsg(end_odom_pose_tf);
+  translation.x -= odom_pose.x;
+  translation.y -= odom_pose.y;
+  translation.theta -= odom_pose.theta;
+
+  // Now scale it by number of measurements
+  Pose2d trans_per_meas;
+  trans_per_meas.x = translation.x / msg->ranges.size();
+  trans_per_meas.y = translation.y / msg->ranges.size();
+  trans_per_meas.theta = translation.theta / msg->ranges.size();
+
   // Need to convert the scan into an ndt_2d style
   ScanPtr scan = std::make_shared<Scan>(graph_->scans.size());
   scan->setPose(robot_pose);
@@ -387,8 +418,14 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       // Transform to robot frame
       Point point(cos_lt * lp.x - sin_lt * lp.y + laser_transform_.x,
                   sin_lt * lp.x + cos_lt * lp.y + laser_transform_.y);
+      // Apply laser movement
+      double cos_tt = cos(translation.theta - (trans_per_meas.theta * i));
+      double sin_tt = sin(translation.theta - (trans_per_meas.theta * i));
+      Point translated(
+        cos_tt * point.x - sin_tt * point.y +(translation.x - (trans_per_meas.x * i)),
+        sin_tt * point.x + cos_tt * point.y + (translation.y - (trans_per_meas.y * i)));
       // Add point to scan
-      points.push_back(point);
+      points.push_back(translated);
     }
   }
   else
@@ -404,8 +441,13 @@ void Mapper::laserCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr& ms
       // Transform to robot frame
       Point point(cos_lt * lp.x - sin_lt * lp.y + laser_transform_.x,
                   sin_lt * lp.x + cos_lt * lp.y + laser_transform_.y);
+      // Apply laser movement
+      double cos_tt = cos(trans_per_meas.theta * i);
+      double sin_tt = sin(trans_per_meas.theta * i);
+      Point translated(cos_tt * point.x - sin_tt * point.y + (trans_per_meas.x * i),
+                       sin_tt * point.x + cos_tt * point.y + (trans_per_meas.y * i));
       // Add point to scan
-      points.push_back(point);
+      points.push_back(translated);
     }
   }
   scan->setPoints(points);
